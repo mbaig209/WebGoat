@@ -55,7 +55,7 @@ stage('Build Artifact') {
             }
         }
                 
-        stage('Deploy WebGoat Application') {
+                stage('Deploy WebGoat Application') {
             steps {
                 echo '🚀 Starting WebGoat Application...'
                 sh """
@@ -71,11 +71,11 @@ stage('Build Artifact') {
                         error "Could not find a compiled WebGoat .jar file in the workspace target folders!"
                     }
                     
-                    // 1. Create the container template shell
-                    sh "docker create -p 8080:8080 --name \$TOMCAT_CONTAINER eclipse-temurin:21-jre-alpine java -jar /app/webgoat.jar"
+                    // 1. Create the container shell running directly from the root file layout
+                    sh "docker create -p 8080:8080 --name \$TOMCAT_CONTAINER eclipse-temurin:21-jre-alpine java -jar /webgoat.jar"
                     
-                    // 2. Stream the jar file directly into the container folder layout
-                    sh "docker cp ${resolvedJarPath} \$TOMCAT_CONTAINER:/app/webgoat.jar"
+                    // 2. Stream the jar directly into the root folder (which is always guaranteed to exist)
+                    sh "docker cp ${resolvedJarPath} \$TOMCAT_CONTAINER:/webgoat.jar"
                     
                     // 3. Fire up the application
                     sh "docker start \$TOMCAT_CONTAINER"
@@ -85,6 +85,7 @@ stage('Build Artifact') {
                 sh "sleep 35"
             }
         }
+
 
         stage('DAST (OWASP ZAP)') {
             steps {
