@@ -2,8 +2,8 @@ pipeline {
     agent any
     
     tools {
-        // Automatically injects Maven into the pipeline path
-        maven 'Maven-3.x' 
+        jdk 'Java-17'     // Matches the JDK name you configured earlier
+        maven 'Maven-3.x' // Matches the Maven name you just configured
     }
     
     environment {
