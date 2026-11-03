@@ -54,27 +54,32 @@ stage('Build Artifact') {
                 sh "mvn clean package -DskipTests -Dmaven.compiler.release=21 -Djava.version=21"
             }
         }
-        stage('Deploy to Tomcat') {
+              stage('Deploy to Tomcat') {
             steps {
                 echo '🚀 Deploying WebGoat to Tomcat Container...'
-                // Clean up previous test containers using Linux shell context
                 sh """
                 docker stop \$TOMCAT_CONTAINER || true
                 docker rm \$TOMCAT_CONTAINER || true
                 """
                 
+                // Bypasses the findFiles plugin by locating the war file via a standard Linux shell command
                 script {
-                    def warFile = findFiles(glob: 'webgoat-server/target/webgoat-server-*.war')
-                    echo "Found war file: ${warFile.path}"
+                    // Find any file ending in .war inside the project structure
+                    def resolvedWarPath = sh(script: "find . -name 'webgoat-server-*.war' -o -name 'webgoat-*.war' | head -n 1", returnStdout: true).trim()
+                    echo "Resolved target artifact path: ${resolvedWarPath}"
                     
-                    sh "docker run -d -p 8080:8080 --name \$TOMCAT_CONTAINER -v \$(pwd)/${warFile.path}:/usr/local/tomcat/webapps/webgoat.war tomcat:9.0"
+                    if (!resolvedWarPath) {
+                        error "Could not find a compiled WebGoat .war file in the workspace target folders!"
+                    }
+                    
+                    // Maps the war file via the shared host volume architecture
+                    sh "docker run -d -p 8080:8080 --name \$TOMCAT_CONTAINER -v jenkins_home:/var/jenkins_home/workspace/WebGoat-DevSecOps-Pipeline/${resolvedWarPath}:/usr/local/tomcat/webapps/webgoat.war tomcat:9.0"
                 }
                 
                 echo '⏳ Waiting for Tomcat initialization...'
-                sh "sleep 20"
+                sh "sleep 25"
             }
         }
-
         stage('DAST (OWASP ZAP)') {
             steps {
                 echo '⚡ Running Dynamic Application Security Testing...'
