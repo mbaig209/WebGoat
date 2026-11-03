@@ -6,7 +6,7 @@ pipeline {
         maven 'Maven-3.x' // Installs Maven automatically inside the container
     }
     
-    environment {
+        environment {
         TOMCAT_CONTAINER = 'webgoat-tomcat'
         TARGET_URL       = 'http://docker.internal'
     }
@@ -54,32 +54,33 @@ stage('Build Artifact') {
                 sh "mvn clean package -DskipTests -Dmaven.compiler.release=21 -Djava.version=21"
             }
         }
-              stage('Deploy to Tomcat') {
+        stage('Deploy WebGoat Application') {
             steps {
-                echo '🚀 Deploying WebGoat to Tomcat Container...'
+                echo '🚀 Starting WebGoat Application...'
+                // Clear out any old running instance on port 8080
                 sh """
                 docker stop \$TOMCAT_CONTAINER || true
                 docker rm \$TOMCAT_CONTAINER || true
                 """
                 
-                // Bypasses the findFiles plugin by locating the war file via a standard Linux shell command
                 script {
-                    // Find any file ending in .war inside the project structure
-                    def resolvedWarPath = sh(script: "find . -name 'webgoat-server-*.war' -o -name 'webgoat-*.war' | head -n 1", returnStdout: true).trim()
-                    echo "Resolved target artifact path: ${resolvedWarPath}"
+                    // Dynamically look for the executable .jar file instead of a .war file
+                    def resolvedJarPath = sh(script: "find . -name 'webgoat-server-*.jar' -o -name 'webgoat-*.jar' | grep -v 'original' | head -n 1", returnStdout: true).trim()
+                    echo "Resolved target executable path: ${resolvedJarPath}"
                     
-                    if (!resolvedWarPath) {
-                        error "Could not find a compiled WebGoat .war file in the workspace target folders!"
+                    if (!resolvedJarPath) {
+                        error "Could not find a compiled WebGoat .jar file in the workspace target folders!"
                     }
                     
-                    // Maps the war file via the shared host volume architecture
-                    sh "docker run -d -p 8080:8080 --name \$TOMCAT_CONTAINER -v jenkins_home:/var/jenkins_home/workspace/WebGoat-DevSecOps-Pipeline/${resolvedWarPath}:/usr/local/tomcat/webapps/webgoat.war tomcat:9.0"
+                    // Launch the app as an isolated container using the native openjdk:17 image, passing the jar directly
+                    sh "docker run -d -p 8080:8080 --name \$TOMCAT_CONTAINER -v jenkins_home:/var/jenkins_home/workspace/WebGoat-DevSecOps-Pipeline/${resolvedJarPath}:/app/webgoat.jar openjdk:17-jdk-slim java -jar /app/webgoat.jar"
                 }
                 
-                echo '⏳ Waiting for Tomcat initialization...'
-                sh "sleep 25"
+                echo '⏳ Waiting for WebGoat initialization...'
+                sh "sleep 30"
             }
         }
+
         stage('DAST (OWASP ZAP)') {
             steps {
                 echo '⚡ Running Dynamic Application Security Testing...'
