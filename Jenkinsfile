@@ -54,17 +54,15 @@ stage('Build Artifact') {
                 sh "mvn clean package -DskipTests -Dmaven.compiler.release=21 -Djava.version=21"
             }
         }
-        stage('Deploy WebGoat Application') {
+              stage('Deploy WebGoat Application') {
             steps {
                 echo '🚀 Starting WebGoat Application...'
-                // Clear out any old running instance on port 8080
                 sh """
                 docker stop \$TOMCAT_CONTAINER || true
                 docker rm \$TOMCAT_CONTAINER || true
                 """
                 
                 script {
-                    // Dynamically look for the executable .jar file instead of a .war file
                     def resolvedJarPath = sh(script: "find . -name 'webgoat-server-*.jar' -o -name 'webgoat-*.jar' | grep -v 'original' | head -n 1", returnStdout: true).trim()
                     echo "Resolved target executable path: ${resolvedJarPath}"
                     
@@ -72,14 +70,15 @@ stage('Build Artifact') {
                         error "Could not find a compiled WebGoat .jar file in the workspace target folders!"
                     }
                     
-                    // Launch the app as an isolated container using the native openjdk:17 image, passing the jar directly
-                    sh "docker run -d -p 8080:8080 --name \$TOMCAT_CONTAINER -v jenkins_home:/var/jenkins_home/workspace/WebGoat-DevSecOps-Pipeline/${resolvedJarPath}:/app/webgoat.jar openjdk:17-jdk-slim java -jar /app/webgoat.jar"
+                    // Swapped base image to an active, reliable Eclipse Temurin Java 21 platform
+                    sh "docker run -d -p 8080:8080 --name \$TOMCAT_CONTAINER -v jenkins_home:/var/jenkins_home/workspace/WebGoat-DevSecOps-Pipeline/${resolvedJarPath}:/app/webgoat.jar eclipse-temurin:21-jre-alpine java -jar /app/webgoat.jar"
                 }
                 
                 echo '⏳ Waiting for WebGoat initialization...'
                 sh "sleep 30"
             }
         }
+
 
         stage('DAST (OWASP ZAP)') {
             steps {
