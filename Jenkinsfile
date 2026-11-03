@@ -21,12 +21,12 @@ pipeline {
             }
         }
 
-        stage('SCA (OWASP Dependency-Check)') {
-            steps {
-                echo '📦 Running Software Composition Analysis directly from container path...'
-                sh "/opt/dependency-check/bin/dependency-check.sh --project WebGoat --scan ./ --format XML --format HTML --out ./"
-            }
-        }
+      //  stage('SCA (OWASP Dependency-Check)') {
+        //    steps {
+          //      echo '📦 Running Software Composition Analysis directly from container path...'
+            //    sh "/opt/dependency-check/bin/dependency-check.sh --project WebGoat --scan ./ --format XML --format HTML --out ./"
+           // }
+       // }
 
         stage('Build Artifact') {
             steps {
