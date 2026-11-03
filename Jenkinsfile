@@ -54,7 +54,8 @@ stage('Build Artifact') {
                 sh "mvn clean package -DskipTests -Dmaven.compiler.release=21 -Djava.version=21"
             }
         }
-              stage('Deploy WebGoat Application') {
+                
+        stage('Deploy WebGoat Application') {
             steps {
                 echo '🚀 Starting WebGoat Application...'
                 sh """
@@ -70,15 +71,20 @@ stage('Build Artifact') {
                         error "Could not find a compiled WebGoat .jar file in the workspace target folders!"
                     }
                     
-                    // Swapped base image to an active, reliable Eclipse Temurin Java 21 platform
-                    sh "docker run -d -p 8080:8080 --name \$TOMCAT_CONTAINER -v jenkins_home:/var/jenkins_home/workspace/WebGoat-DevSecOps-Pipeline/${resolvedJarPath}:/app/webgoat.jar eclipse-temurin:21-jre-alpine java -jar /app/webgoat.jar"
+                    // 1. Create the container template shell
+                    sh "docker create -p 8080:8080 --name \$TOMCAT_CONTAINER eclipse-temurin:21-jre-alpine java -jar /app/webgoat.jar"
+                    
+                    // 2. Stream the jar file directly into the container folder layout
+                    sh "docker cp ${resolvedJarPath} \$TOMCAT_CONTAINER:/app/webgoat.jar"
+                    
+                    // 3. Fire up the application
+                    sh "docker start \$TOMCAT_CONTAINER"
                 }
                 
                 echo '⏳ Waiting for WebGoat initialization...'
-                sh "sleep 30"
+                sh "sleep 35"
             }
         }
-
 
         stage('DAST (OWASP ZAP)') {
             steps {
