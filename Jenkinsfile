@@ -26,14 +26,20 @@ pipeline {
             }
         }
 
-        stage('SCA (OWASP Dependency-Check)') {
+     //   stage('SCA (OWASP Dependency-Check)') {
+          //  steps {
+            //    echo '📦 Scanning third-party dependencies...'
+              //  dependencyCheck additionalArguments: '--scan ./ --format XML --format HTML', odcInstallation: 'OWASP-Dependency-Check'
+                //dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+           // }
+       // }
+
+     stage('SCA (OWASP Dependency-Check)') {
             steps {
-                echo '📦 Scanning third-party dependencies...'
-                dependencyCheck additionalArguments: '--scan ./ --format XML --format HTML', odcInstallation: 'OWASP-Dependency-Check'
-                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+                echo '📦 Running Software Composition Analysis directly from container path...'
+                sh "/opt/dependency-check/bin/dependency-check.sh --project WebGoat --scan ./ --format XML --format HTML --out ./"
             }
         }
-
         stage('Build Artifact') {
             steps {
                 echo '🔨 Compiling WebGoat War file...'
