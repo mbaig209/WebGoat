@@ -49,9 +49,9 @@ pipeline {
        // }
 stage('Build Artifact') {
             steps {
-                echo '🔨 Compiling WebGoat War file with explicit Java targeted configuration...'
-                // Overrides the project pom property directly to enforce Java 17 compatibility on Java 21+ platforms
-                sh "mvn clean package -DskipTests -Dmaven.compiler.release=17 -Djava.version=17"
+                echo '🔨 Compiling WebGoat War file with Java 21 targeted configurations...'
+                // Changed from release 17 to release 21 to support advanced switch patterns
+                sh "mvn clean package -DskipTests -Dmaven.compiler.release=21 -Djava.version=21"
             }
         }
         stage('Deploy to Tomcat') {
