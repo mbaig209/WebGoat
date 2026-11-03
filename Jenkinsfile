@@ -40,14 +40,20 @@ pipeline {
            //     sh "/opt/dependency-check/bin/dependency-check.sh --project WebGoat --scan ./ --format XML --format HTML --out ./"
          //   }
        // }
-        stage('Build Artifact') {
-            steps {
-                echo '🔨 Compiling WebGoat War file...'
+       // stage('Build Artifact') {
+          //  steps {
+          //      echo '🔨 Compiling WebGoat War file...'
                 // Changed from 'bat' to 'sh'
-                sh "mvn clean package -DskipTests"
+        //        sh "mvn clean package -DskipTests"
+      //      }
+       // }
+stage('Build Artifact') {
+            steps {
+                echo '🔨 Compiling WebGoat War file with explicit Java targeted configuration...'
+                // Overrides the project pom property directly to enforce Java 17 compatibility on Java 21+ platforms
+                sh "mvn clean package -DskipTests -Dmaven.compiler.release=17 -Djava.version=17"
             }
         }
-
         stage('Deploy to Tomcat') {
             steps {
                 echo '🚀 Deploying WebGoat to Tomcat Container...'
