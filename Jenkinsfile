@@ -73,8 +73,8 @@ stage('Build Artifact') {
                     
                     // Changed external host port binding from 8080 to 8088
                    // sh "docker create -p 8088:8080 --name \$TOMCAT_CONTAINER eclipse-temurin:21-jre-alpine java -jar /webgoat.jar"
-                    sh "docker create --network devsecops-network -p 8088:8080 --name \$TOMCAT_CONTAINER eclipse-temurin:21-jre-alpine java -jar /webgoat.jar"
-                    
+                   // sh "docker create --network devsecops-network -p 8088:8080 --name \$TOMCAT_CONTAINER eclipse-temurin:21-jre-alpine java -jar /webgoat.jar"
+                    sh "docker create --network devsecops-network -p 8088:8080 --name \$TOMCAT_CONTAINER eclipse-temurin:21-jre-alpine java -jar /webgoat.jar --server.address=0.0.0.0"
                     sh "docker cp ${resolvedJarPath} \$TOMCAT_CONTAINER:/webgoat.jar"
                     
                     sh "docker start \$TOMCAT_CONTAINER"
