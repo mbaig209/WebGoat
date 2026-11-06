@@ -146,6 +146,7 @@ stage('SonarQube - Generate JSON Report') {
     }
 }
         
+
 stage('SonarQube - Generate HTML Report') {
     steps {
         echo 'Generating SonarQube HTML report...'
@@ -156,73 +157,58 @@ stage('SonarQube - Generate HTML Report') {
                 -v jenkins_home:/data \
                 -w "/data${WORKSPACE#/var/jenkins_home}" \
                 python:3.12-alpine \
-                python - <<'PY'
-import json
-import html
+                python -c '
+import json, html
 from collections import Counter
 
-with open("sonarqube-report.json", encoding="utf-8") as f:
+with open("sonarqube-report.json") as f:
     data = json.load(f)
 
 issues = data.get("issues", [])
-total = data.get("total", len(issues))
 counts = Counter(i.get("severity", "UNKNOWN") for i in issues)
 
-rows = ""
-for issue in issues:
-    rows += f"""
-    <tr>
-      <td>{html.escape(issue.get('severity', ''))}</td>
-      <td>{html.escape(issue.get('type', ''))}</td>
-      <td>{html.escape(issue.get('component', '').split(':')[-1])}</td>
-      <td>{issue.get('line', 'N/A')}</td>
-      <td>{html.escape(issue.get('message', ''))}</td>
-    </tr>
-    """
+rows = "".join(
+    "<tr><td>" + html.escape(str(i.get("severity", ""))) +
+    "</td><td>" + html.escape(str(i.get("type", ""))) +
+    "</td><td>" + html.escape(str(i.get("component", "")).split(":")[-1]) +
+    "</td><td>" + str(i.get("line", "N/A")) +
+    "</td><td>" + html.escape(str(i.get("message", ""))) +
+    "</td></tr>"
+    for i in issues
+)
 
 summary = "".join(
-    f"<li>{html.escape(k)}: {v}</li>"
+    "<li>" + html.escape(k) + ": " + str(v) + "</li>"
     for k, v in sorted(counts.items())
 )
 
-report = f"""<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<title>SonarQube WebGoat Security Report</title>
+report = """<html><head><meta charset="UTF-8">
+<title>WebGoat SonarQube Report</title>
 <style>
-body {{ font-family: Arial; margin: 30px; }}
-table {{ border-collapse: collapse; width: 100%; }}
-th, td {{ border: 1px solid #ddd; padding: 9px; text-align: left; }}
-th {{ background: #263b59; color: white; }}
-tr:nth-child(even) {{ background: #f2f2f2; }}
-</style>
-</head>
-<body>
-<h1>SonarQube - WebGoat Analysis Report</h1>
-<p>Total issues reported by API: <b>{total}</b></p>
-<h2>Severity Summary</h2>
-<ul>{summary}</ul>
-<h2>Issue Details (retrieved: {len(issues)})</h2>
-<table>
-<tr><th>Severity</th><th>Type</th><th>File</th>
-<th>Line</th><th>Message</th></tr>
-{rows}
-</table>
-</body>
-</html>"""
+body{font-family:Arial;margin:30px}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:9px;text-align:left}
+th{background:#263b59;color:white}
+tr:nth-child(even){background:#f2f2f2}
+</style></head><body>
+<h1>WebGoat - SonarQube Analysis Report</h1>
+<h2>Issue Summary</h2><ul>""" + summary + """</ul>
+<h2>Issue Details</h2>
+<table><tr><th>Severity</th><th>Type</th><th>File</th>
+<th>Line</th><th>Message</th></tr>""" + rows + """</table>
+</body></html>"""
 
-with open("sonarqube-report.html", "w", encoding="utf-8") as f:
+with open("sonarqube-report.html", "w") as f:
     f.write(report)
 
-print("HTML report generated.")
-print("Issues retrieved:", len(issues))
-PY
+print("HTML report generated:", len(issues), "issues")
+'
         '''
 
         sh 'ls -lh sonarqube-report.html'
     }
 }
+
 
         stage('Generate CycloneDX SBOM') {
             steps {
