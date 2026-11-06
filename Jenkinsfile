@@ -326,12 +326,12 @@ PY
     }
 
     post {
-        always {
-            archiveArtifacts(
-                artifacts: 'semgrep-sast-report.json,zap_report.html,trufflehog-report.jsonl,target/bom.json,trivy-sca-report.json',
-                fingerprint: true,
-                allowEmptyArchive: true
-            )
-        }
+    always {
+        archiveArtifacts(
+            artifacts: 'semgrep-sast-report.json,sonarqube-report.json,sonarqube-report.html,zap_report.html,trufflehog-report.jsonl,target/bom.json,trivy-sca-report.json',
+            fingerprint: true,
+            allowEmptyArchive: true
+        )
     }
+}
 }
