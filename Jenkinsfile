@@ -1,114 +1,123 @@
+
 pipeline {
     agent any
-    
+
+    options {
+        skipDefaultCheckout(true)
+    }
+
     tools {
-        jdk 'Java-17'     // Points to your updated /opt/java/openjdk configuration
-        maven 'Maven-3.x' // Installs Maven automatically inside the container
+        jdk 'Java-17'
+        maven 'Maven-3.x'
     }
-    
-        environment {
+
+    environment {
         TOMCAT_CONTAINER = 'webgoat-tomcat'
-        TARGET_URL       = 'http://docker.internal'
+        TARGET_URL = 'http://webgoat-tomcat:8080/WebGoat'
     }
-    
+
     stages {
+
         stage('Git Checkout') {
             steps {
                 checkout scm
             }
         }
 
-        stage('Git Secrets (Trufflehog)') {
+        stage('Git Secrets (TruffleHog)') {
             steps {
-                echo '🕵️‍♂️ Scanning for leaked credentials...'
-                // Changed from 'bat' to 'sh', and changed Windows path mapping to Linux syntax
-                sh "docker run --rm -v \$(pwd):/pwd trufflesecurity/trufflehog:latest github --repo=file:///pwd --fail"
-            }
-        }
+                echo 'Scanning workspace for leaked credentials...'
 
-     //   stage('SCA (OWASP Dependency-Check)') {
-          //  steps {
-            //    echo '📦 Scanning third-party dependencies...'
-              //  dependencyCheck additionalArguments: '--scan ./ --format XML --format HTML', odcInstallation: 'OWASP-Dependency-Check'
-                //dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
-           // }
-       // }
-
-     // stage('SCA (OWASP Dependency-Check)') {
-             // steps {
-             //   echo '📦 Running Software Composition Analysis directly from container path...'
-           //     sh "/opt/dependency-check/bin/dependency-check.sh --project WebGoat --scan ./ --format XML --format HTML --out ./"
-         //   }
-       // }
-       // stage('Build Artifact') {
-          //  steps {
-          //      echo '🔨 Compiling WebGoat War file...'
-                // Changed from 'bat' to 'sh'
-        //        sh "mvn clean package -DskipTests"
-      //      }
-       // }
-stage('Build Artifact') {
-            steps {
-                echo '🔨 Compiling WebGoat War file with Java 21 targeted configurations...'
-                // Changed from release 17 to release 21 to support advanced switch patterns
-                sh "mvn clean package -DskipTests -Dmaven.compiler.release=21 -Djava.version=21"
-            }
-        }
-                
-             stage('Deploy WebGoat Application') {
-            steps {
-                echo '🚀 Starting WebGoat Application...'
                 sh """
-                docker stop \$TOMCAT_CONTAINER || true
-                docker rm \$TOMCAT_CONTAINER || true
+                    docker run --rm \
+                        -v jenkins_home:/scan:ro \
+                        trufflesecurity/trufflehog:latest \
+                        filesystem "/scan/\${WORKSPACE#/var/jenkins_home/}" \
+                        --fail \
+                        --fail-on-scan-errors
                 """
-                
+            }
+        }
+
+        stage('Build Artifact') {
+            steps {
+                echo 'Building WebGoat using Java 21 settings...'
+
+                sh """
+                    mvn clean package \
+                        -DskipTests \
+                        -Dmaven.compiler.release=21 \
+                        -Djava.version=21
+                """
+            }
+        }
+
+        stage('Deploy WebGoat Application') {
+            steps {
+                echo 'Starting WebGoat Application...'
+
+                sh """
+                    docker stop \$TOMCAT_CONTAINER || true
+                    docker rm \$TOMCAT_CONTAINER || true
+                """
+
                 script {
-                    def resolvedJarPath = sh(script: "find . -name 'webgoat-server-*.jar' -o -name 'webgoat-*.jar' | grep -v 'original' | head -n 1", returnStdout: true).trim()
-                    echo "Resolved target executable path: ${resolvedJarPath}"
-                    
+                    def resolvedJarPath = sh(
+                        script: "find ./target -name 'webgoat-*.jar' | grep -v 'original' | head -n 1",
+                        returnStdout: true
+                    ).trim()
+
                     if (!resolvedJarPath) {
-                        error "Could not find a compiled WebGoat .jar file in the workspace target folders!"
+                        error 'Could not find the compiled WebGoat JAR!'
                     }
-                    
-                    // Changed external host port binding from 8080 to 8088
-                   // sh "docker create -p 8088:8080 --name \$TOMCAT_CONTAINER eclipse-temurin:21-jre-alpine java -jar /webgoat.jar"
-                   // sh "docker create --network devsecops-network -p 8088:8080 --name \$TOMCAT_CONTAINER eclipse-temurin:21-jre-alpine java -jar /webgoat.jar"
-                    sh "docker create --network devsecops-network -p 8088:8080 --name \$TOMCAT_CONTAINER eclipse-temurin:21-jre-alpine java -jar /webgoat.jar --server.address=0.0.0.0"
+
+                    echo "Resolved JAR: ${resolvedJarPath}"
+
+                    sh """
+                        docker create \
+                            --network devsecops-network \
+                            -p 8088:8080 \
+                            --name \$TOMCAT_CONTAINER \
+                            eclipse-temurin:21-jre-alpine \
+                            java -jar /webgoat.jar \
+                            --server.address=0.0.0.0
+                    """
+
                     sh "docker cp ${resolvedJarPath} \$TOMCAT_CONTAINER:/webgoat.jar"
-                    
+
                     sh "docker start \$TOMCAT_CONTAINER"
                 }
-                
-                echo '⏳ Waiting for WebGoat initialization...'
-                sh "sleep 35"
+
+                echo 'Waiting for WebGoat initialization...'
+                sh 'sleep 35'
             }
         }
 
-       // stage('DAST (OWASP ZAP)') {
-       //     steps {
-       //         echo '⚡ Running Dynamic Application Security Testing...'
-       //         sh "docker run --rm -v jenkins_home:/zap/wrk/:rw owasp/zap2docker-stable zap-baseline.py -t \$TARGET_URL  -r /zap/wrk/zap_report.html || true"
-       //     }
-       // }
         stage('DAST - OWASP ZAP') {
-    steps {
-        sh """
-            docker run --rm --user 0:0 --network devsecops-network \
-                -v jenkins_home:/var/jenkins_home:rw \
-                ghcr.io/zaproxy/zaproxy:stable \
-                zap-baseline.py \
-                -t http://webgoat-tomcat:8080/WebGoat \
-               -r zap_report.html \
-                -I
-        """
+            steps {
+                echo 'Running OWASP ZAP Baseline Scan...'
+
+                sh """
+                    docker run --rm \
+                        --user 0:0 \
+                        --network devsecops-network \
+                        -v jenkins_home:/zap/wrk:rw \
+                        ghcr.io/zaproxy/zaproxy:stable \
+                        zap-baseline.py \
+                        -t "\$TARGET_URL" \
+                        -r "/zap/wrk/\${WORKSPACE#/var/jenkins_home/}/zap_report.html" \
+                        -I
+                """
+            }
+        }
     }
-}
-    }
-    
+
     post {
         always {
-            archiveArtifacts artifacts: 'zap_report.html', allowEmptyArchive: true
+            archiveArtifacts(
+                artifacts: 'zap_report.html',
+                fingerprint: true
+            )
         }
     }
 }
