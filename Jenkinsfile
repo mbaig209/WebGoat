@@ -120,6 +120,31 @@ stage('SonarQube API Connectivity') {
 }
 
 
+stage('SonarQube - Generate JSON Report') {
+    steps {
+        withCredentials([
+            string(
+                credentialsId: 'sonarqube-token',
+                variable: 'SONAR_TOKEN'
+            )
+        ]) {
+            sh '''
+                docker run --rm \
+                    --network devsecops-network \
+                    -v jenkins_home:/data:rw \
+                    -e SONAR_TOKEN="$SONAR_TOKEN" \
+                    curlimages/curl:latest \
+                    -fsS \
+                    -u "$SONAR_TOKEN:" \
+                    "http://sonarqube:9000/api/issues/search?componentKeys=WebGoat&ps=500" \
+                    -o "/data${WORKSPACE#/var/jenkins_home}/sonarqube-report.json"
+            '''
+        }
+
+        sh 'ls -lh sonarqube-report.json'
+    }
+}
+
         stage('Generate CycloneDX SBOM') {
             steps {
                 echo 'Generating CycloneDX Software Bill of Materials...'
