@@ -93,6 +93,29 @@ stage('SAST - SonarQube') {
         }
     }
 }
+        
+stage('SonarQube API Connectivity') {
+    steps {
+        withCredentials([
+            string(
+                credentialsId: 'sonarqube-token',
+                variable: 'SONAR_TOKEN'
+            )
+        ]) {
+            sh '''
+                docker run --rm \
+                    -e SONAR_TOKEN="$SONAR_TOKEN" \
+                    curlimages/curl:latest \
+                    -fsS \
+                    -u "$SONAR_TOKEN:" \
+                    "http://sonarqube:9000/api/issues/search?componentKeys=WebGoat&ps=1" \
+                    -o /dev/null
+            '''
+
+            echo 'SonarQube API connectivity verified.'
+        }
+    }
+}
 
 
         stage('Generate CycloneDX SBOM') {
