@@ -2,8 +2,7 @@ pipeline {
     agent any
     
     tools {
-        //jdk 'Java-17'     // Points to your updated /opt/java/openjdk configuration
-        -v jenkins_home:/var/jenkins_home:rw
+        jdk 'Java-17'     // Points to your updated /opt/java/openjdk configuration
         maven 'Maven-3.x' // Installs Maven automatically inside the container
     }
     
@@ -96,7 +95,7 @@ stage('Build Artifact') {
     steps {
         sh """
             docker run --rm --user 0:0 --network devsecops-network \
-                -v "\$(pwd):/zap/wrk/:rw" \
+                -v jenkins_home:/var/jenkins_home:rw \
                 ghcr.io/zaproxy/zaproxy:stable \
                 zap-baseline.py \
                 -t http://webgoat-tomcat:8080/WebGoat \
