@@ -33,10 +33,12 @@ pipeline {
             docker run --rm \
                 -v jenkins_home:/scan:ro \
                 trufflesecurity/trufflehog:latest \
+                --json \
                 filesystem "/scan\${WORKSPACE#/var/jenkins_home}" \
                 --results=verified,unknown \
                 --fail \
-                --fail-on-scan-errors
+                --fail-on-scan-errors \
+                > trufflehog-report.jsonl
         """
     }
 }
