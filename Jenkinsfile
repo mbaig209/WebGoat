@@ -2,7 +2,8 @@ pipeline {
     agent any
     
     tools {
-        jdk 'Java-17'     // Points to your updated /opt/java/openjdk configuration
+        //jdk 'Java-17'     // Points to your updated /opt/java/openjdk configuration
+        -v jenkins_home:/var/jenkins_home:rw
         maven 'Maven-3.x' // Installs Maven automatically inside the container
     }
     
