@@ -88,7 +88,7 @@ stage('Build Artifact') {
        // stage('DAST (OWASP ZAP)') {
        //     steps {
        //         echo '⚡ Running Dynamic Application Security Testing...'
-       //         sh "docker run --rm -v jenkins_home:/zap/wrk/:rw owasp/zap2docker-stable zap-baseline.py -t \$TARGET_URL -r zap_report.html || true"
+       //         sh "docker run --rm -v jenkins_home:/zap/wrk/:rw owasp/zap2docker-stable zap-baseline.py -t \$TARGET_URL  -r /zap/wrk/zap_report.html || true"
        //     }
        // }
         stage('DAST - OWASP ZAP') {
