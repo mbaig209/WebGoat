@@ -129,8 +129,9 @@ stage('SonarQube - Generate JSON Report') {
             )
         ]) {
             sh '''
-                docker run --rm \
-                    --network devsecops-network \
+               docker run --rm \
+    --user 1000:1000 \
+    --network devsecops-network \
                     -v jenkins_home:/data:rw \
                     -e SONAR_TOKEN="$SONAR_TOKEN" \
                     curlimages/curl:latest \
