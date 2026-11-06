@@ -29,17 +29,19 @@ pipeline {
     steps {
         echo 'Scanning source code for leaked credentials...'
 
-        sh """
+        sh '''
             docker run --rm \
                 -v jenkins_home:/scan:ro \
                 trufflesecurity/trufflehog:latest \
                 --json \
-                filesystem "/scan\${WORKSPACE#/var/jenkins_home}" \
+                filesystem "/scan${WORKSPACE#/var/jenkins_home}" \
                 --results=verified,unknown \
                 --fail \
                 --fail-on-scan-errors \
                 > trufflehog-report.jsonl
-        """
+        '''
+
+        sh 'ls -lh trufflehog-report.jsonl'
     }
 }
 
@@ -118,9 +120,10 @@ pipeline {
 
     post {
         always {
-            archiveArtifacts(
-                artifacts: 'zap_report.html',
-                fingerprint: true
+              archiveArtifacts(
+            artifacts: 'zap_report.html,trufflehog-report.jsonl',
+            fingerprint: true,
+            allowEmptyArchive: true
             )
         }
     }
