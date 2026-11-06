@@ -78,20 +78,22 @@ pipeline {
             }
         }
 
-        stage('SAST - SonarQube') {
-            steps {
-                echo 'Running SonarQube code analysis...'
+        
+stage('SAST - SonarQube') {
+    steps {
+        echo 'Running SonarQube code analysis...'
 
-                    withSonarQubeEnv('SonarQube') {
-                sh '''
-                    mvn sonar:sonar \
-                        -Dsonar.projectKey=webgoat \
-                        -Dsonar.projectName=WebGoat \
-                        -Dsonar.java.binaries=target/classes
+        withSonarQubeEnv('SonarQube') {
+            sh '''
+                mvn org.sonarsource.scanner.maven:sonar-maven-plugin:5.0.0.4389:sonar \
+                    -Dsonar.projectKey=webgoat \
+                    -Dsonar.projectName=WebGoat \
+                    -Dsonar.java.binaries=target/classes
             '''
         }
     }
 }
+
 
         stage('Generate CycloneDX SBOM') {
             steps {
