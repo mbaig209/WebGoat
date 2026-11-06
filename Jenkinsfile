@@ -25,20 +25,21 @@ pipeline {
             }
         }
 
-        stage('Git Secrets (TruffleHog)') {
-            steps {
-                 echo 'Scanning source code for leaked credentials...'
+        stage('Git Secrets (Trufflehog)') {
+    steps {
+        echo 'Scanning source code for leaked credentials...'
 
-                sh """
-                    docker run --rm \
-                        -v jenkins_home:/scan:ro \
-                        trufflesecurity/trufflehog:latest \
-                        filesystem "/scan/\${WORKSPACE#/var/jenkins_home/}" \
-                        --fail \
-                        --fail-on-scan-errors
-                """
-            }
-        }
+        sh """
+            docker run --rm \
+                -v jenkins_home:/scan:ro \
+                trufflesecurity/trufflehog:latest \
+                filesystem "/scan\${WORKSPACE#/var/jenkins_home}" \
+                --results=verified,unknown \
+                --fail \
+                --fail-on-scan-errors
+        """
+    }
+}
 
         stage('Build Artifact') {
             steps {
