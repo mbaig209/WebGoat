@@ -58,21 +58,19 @@ pipeline {
             }
         }
 
-        stage('SCA - Trivy Dependency Scan') {
+       stage('SCA - Trivy Dependency Scan') {
     steps {
         echo 'Scanning WebGoat JAR for vulnerabilities...'
 
         sh '''
             docker run --rm \
                 -v jenkins_home:/scan:rw \
-              //  -v jenkins_home:/root/.m2:ro \
                 aquasec/trivy:latest \
                 fs \
                 --scanners vuln \
                 --format json \
                 --output "/scan${WORKSPACE#/var/jenkins_home}/trivy-sca-report.json" \
                 "/scan${WORKSPACE#/var/jenkins_home}/target/webgoat-2026.6-SNAPSHOT.jar"
-               //  "/scan${WORKSPACE#/var/jenkins_home}/pom.xml"
         '''
 
         sh 'ls -lh trivy-sca-report.json'
