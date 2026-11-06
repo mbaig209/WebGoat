@@ -94,7 +94,8 @@ stage('Build Artifact') {
         stage('DAST - OWASP ZAP') {
     steps {
         sh """
-            docker run --rm --network devsecops-network \
+          //  docker run --rm --network devsecops-network \
+          docker run --rm --user 0:0 --network devsecops-network \
                 -v "\$(pwd):/zap/wrk/:rw" \
                 ghcr.io/zaproxy/zaproxy:stable \
                 zap-baseline.py \
