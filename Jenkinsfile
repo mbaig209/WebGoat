@@ -99,7 +99,8 @@ stage('Build Artifact') {
                 ghcr.io/zaproxy/zaproxy:stable \
                 zap-baseline.py \
                 -t http://webgoat-tomcat:8080/WebGoat \
-                -r zap_report.html \
+               // -r zap_report.html \
+               -r /zap/wrk/zap_report.html
                 -I
         """
     }
