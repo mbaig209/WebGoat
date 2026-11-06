@@ -78,6 +78,21 @@ pipeline {
             }
         }
 
+        stage('SAST - SonarQube') {
+            steps {
+                echo 'Running SonarQube code analysis...'
+
+                    withSonarQubeEnv('SonarQube') {
+                sh '''
+                    mvn sonar:sonar \
+                        -Dsonar.projectKey=webgoat \
+                        -Dsonar.projectName=WebGoat \
+                        -Dsonar.java.binaries=target/classes
+            '''
+        }
+    }
+}
+
         stage('Generate CycloneDX SBOM') {
             steps {
                 echo 'Generating CycloneDX Software Bill of Materials...'
