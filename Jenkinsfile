@@ -248,7 +248,7 @@ stage('SCA - OWASP Dependency-Check') {
                     -e NVD_API_KEY="$NVD_API_KEY" \
                     owasp/dependency-check:latest \
                     --scan "/src${WORKSPACE#/var/jenkins_home}" \
-                    --format ALL \
+                    --format json \
                     --out "/src${WORKSPACE#/var/jenkins_home}/dependency-check-report" \
                     --nvdApiKey "$NVD_API_KEY"
             '''
@@ -339,7 +339,7 @@ stage('SCA - OWASP Dependency-Check') {
     post {
     always {
         archiveArtifacts(
-            artifacts: 'semgrep-sast-report.json,sonarqube-report.json,sonarqube-report.html,zap_report.html,trufflehog-report.jsonl,target/bom.json,trivy-sca-report.json',
+            artifacts: 'dependency-check-report/dependency-check-report.json,semgrep-sast-report.json,sonarqube-report.json,sonarqube-report.html,zap_report.html,trufflehog-report.jsonl,target/bom.json,trivy-sca-report.json',
             fingerprint: true,
             allowEmptyArchive: true
         )
