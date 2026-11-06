@@ -25,6 +25,26 @@ pipeline {
             }
         }
 
+        stage('SAST - Semgrep') {
+            steps {
+                echo 'Scanning WebGoat source code with Semgrep...'
+
+                sh '''
+                    docker run --rm \
+                        -v jenkins_home:/src:rw \
+                        semgrep/semgrep \
+                        semgrep scan \
+                        --config p/java \
+                        --metrics=off \
+                        --json \
+                        --output "/src${WORKSPACE#/var/jenkins_home}/semgrep-sast-report.json" \
+                        "/src${WORKSPACE#/var/jenkins_home}"
+                '''
+
+                sh 'ls -lh semgrep-sast-report.json'
+            }
+        }
+
         stage('Git Secrets (Trufflehog)') {
             steps {
                 echo 'Scanning source code for leaked credentials...'
@@ -76,9 +96,7 @@ pipeline {
                         "-DskipTests"
                 '''
 
-                sh '''
-                    ls -lh target/bom.json
-                '''
+                sh 'ls -lh target/bom.json'
             }
         }
 
@@ -164,7 +182,7 @@ pipeline {
     post {
         always {
             archiveArtifacts(
-                artifacts: 'zap_report.html,trufflehog-report.jsonl,target/bom.json,trivy-sca-report.json',
+                artifacts: 'semgrep-sast-report.json,zap_report.html,trufflehog-report.jsonl,target/bom.json,trivy-sca-report.json',
                 fingerprint: true,
                 allowEmptyArchive: true
             )
