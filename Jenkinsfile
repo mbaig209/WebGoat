@@ -231,7 +231,32 @@ print("HTML report generated:", len(issues), "issues")
                 sh 'ls -lh target/bom.json'
             }
         }
+stage('SCA - OWASP Dependency-Check') {
+    steps {
+        echo 'Scanning WebGoat dependencies for known vulnerabilities...'
 
+        withCredentials([
+            string(
+                credentialsId: 'NVD_API_KEY',
+                variable: 'NVD_API_KEY'
+            )
+        ]) {
+            sh '''
+                docker run --rm \
+                    -v jenkins_home:/src:rw \
+                    -v dependency-check-data:/usr/share/dependency-check/data \
+                    -e NVD_API_KEY="$NVD_API_KEY" \
+                    owasp/dependency-check:latest \
+                    --scan "/src${WORKSPACE#/var/jenkins_home}" \
+                    --format ALL \
+                    --out "/src${WORKSPACE#/var/jenkins_home}/dependency-check-report" \
+                    --nvdApiKey "$NVD_API_KEY"
+            '''
+        }
+
+        sh 'ls -lh dependency-check-report/'
+    }
+}
         stage('SCA - Trivy Dependency Scan') {
             steps {
                 echo 'Scanning CycloneDX SBOM for dependency vulnerabilities...'
