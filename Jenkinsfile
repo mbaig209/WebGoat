@@ -94,6 +94,7 @@ stage('SAST - SonarQube') {
     }
 }
         
+
 stage('SonarQube API Connectivity') {
     steps {
         withCredentials([
@@ -104,6 +105,7 @@ stage('SonarQube API Connectivity') {
         ]) {
             sh '''
                 docker run --rm \
+                    --network devsecops-network \
                     -e SONAR_TOKEN="$SONAR_TOKEN" \
                     curlimages/curl:latest \
                     -fsS \
