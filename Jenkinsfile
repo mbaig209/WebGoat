@@ -107,7 +107,7 @@ pipeline {
                         ghcr.io/zaproxy/zaproxy:stable \
                         zap-baseline.py \
                         -t "\$TARGET_URL" \
-                        -r "/zap/wrk/\${WORKSPACE#/var/jenkins_home/}/zap_report.html" \
+                        -r "/\${WORKSPACE#/var/jenkins_home/}/zap_report.html" \
                         -I
                 """
             }
