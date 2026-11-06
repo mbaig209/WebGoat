@@ -70,7 +70,7 @@ pipeline {
                 --scanners vuln \
                 --format json \
                 --output "/scan${WORKSPACE#/var/jenkins_home}/trivy-sca-report.json" \
-                "/scan${WORKSPACE#/var/jenkins_home}"
+                "/scan${WORKSPACE#/var/jenkins_home}/target/webgoat-2026.6-SNAPSHOT.jar"
         '''
 
         sh 'ls -lh trivy-sca-report.json'
