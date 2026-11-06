@@ -86,7 +86,7 @@ stage('SAST - SonarQube') {
         withSonarQubeEnv('SonarQube') {
             sh '''
                 mvn org.sonarsource.scanner.maven:sonar-maven-plugin:5.0.0.4389:sonar \
-                    -Dsonar.projectKey=webgoat \
+                    -Dsonar.projectKey=WebGoat \
                     -Dsonar.projectName=WebGoat \
                     -Dsonar.java.binaries=target/classes
             '''
