@@ -27,7 +27,7 @@ pipeline {
 
         stage('Git Secrets (TruffleHog)') {
             steps {
-                echo 'Scanning workspace for leaked credentials...'
+                 echo 'Scanning source code for leaked credentials...'
 
                 sh """
                     docker run --rm \
