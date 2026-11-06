@@ -248,7 +248,7 @@ stage('SCA - OWASP Dependency-Check') {
                     -e NVD_API_KEY="$NVD_API_KEY" \
                     owasp/dependency-check:latest \
                     --scan "/src${WORKSPACE#/var/jenkins_home}" \
-                    --format json \
+                    --format JSON \
                     --out "/src${WORKSPACE#/var/jenkins_home}/dependency-check-report" \
                     --nvdApiKey "$NVD_API_KEY"
             '''
