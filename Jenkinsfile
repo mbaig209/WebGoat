@@ -329,7 +329,8 @@ stage('SCA - OWASP Dependency-Check') {
                         ghcr.io/zaproxy/zaproxy:stable \
                         zap-baseline.py \
                         -t "\$TARGET_URL" \
-                        -r "/\${WORKSPACE#/var/jenkins_home/}/zap_report.html" \
+                        -r "/\${WORKSPACE#/var/jenkins_home/}/zap_report.html"  \
+                        -J "/\${WORKSPACE#/var/jenkins_home}/zap_report.json" \
                         -I
                 """
             }
@@ -339,7 +340,7 @@ stage('SCA - OWASP Dependency-Check') {
     post {
     always {
         archiveArtifacts(
-            artifacts: 'dependency-check-report/dependency-check-report.json,semgrep-sast-report.json,sonarqube-report.json,sonarqube-report.html,zap_report.html,trufflehog-report.jsonl,target/bom.json,trivy-sca-report.json',
+            artifacts: 'dependency-check-report/dependency-check-report.json,semgrep-sast-report.json,sonarqube-report.json,sonarqube-report.html,zap_report.html,zap_report.json,trufflehog-report.jsonl,target/bom.json,trivy-sca-report.json',
             fingerprint: true,
             allowEmptyArchive: true
         )
