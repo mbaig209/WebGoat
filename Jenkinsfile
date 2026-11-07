@@ -12,7 +12,7 @@ pipeline {
     }
 
     environment {
-         ENABLE_QUALITY_GATES = 'false'
+         ENABLE_QUALITY_GATES = 'False'
         TOMCAT_CONTAINER = 'webgoat-tomcat'
         TARGET_URL = 'http://webgoat-tomcat:8080/WebGoat'
     }
