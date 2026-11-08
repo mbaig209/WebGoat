@@ -423,6 +423,10 @@ stage('Dependency-Check Quality Gate') {
         environment name: 'ENABLE_DEPENDENCY_CHECK_GATE', value: 'true'
     }
     steps {
+          catchError(
+        buildResult: 'FAILURE',
+        stageResult: 'FAILURE'
+    ) {
         echo 'Evaluating Dependency-Check security findings...'
 
         sh '''
@@ -465,7 +469,7 @@ print("Dependency-Check Quality Gate PASSED.")
         '''
     }
 }
-
+}
         // GATE 4: Fail the build if Trivy reports any CRITICAL vulnerabilities.
 
 stage('Trivy Quality Gate') {
@@ -473,6 +477,10 @@ stage('Trivy Quality Gate') {
         environment name: 'ENABLE_TRIVY_GATE', value: 'true'
     }
     steps {
+          catchError(
+            buildResult: 'FAILURE',
+            stageResult: 'FAILURE')
+        {
         echo 'Evaluating Trivy security findings...'
 
         sh '''
@@ -510,7 +518,7 @@ print("Trivy Quality Gate PASSED.")
         '''
     }
 }
-
+}
         // GATE 5: Fail the build if ZAP reports any High-risk alerts.
 
 stage('ZAP Quality Gate') {
@@ -518,6 +526,10 @@ stage('ZAP Quality Gate') {
         environment name: 'ENABLE_ZAP_GATE', value: 'true'
     }
     steps {
+          catchError(
+        buildResult: 'FAILURE',
+        stageResult: 'FAILURE'
+    ) {
         echo 'Evaluating OWASP ZAP security findings...'
 
         sh '''
