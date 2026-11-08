@@ -13,6 +13,7 @@ pipeline {
 
     environment {
         ENABLE_SEMGREP_GATE = 'true'
+        ENABLE_SONARQUBE_GATE = 'true'
         ENABLE_TRUFFLEHOG_GATE = 'true'
         ENABLE_DEPENDENCY_CHECK_GATE = 'true'
         ENABLE_TRIVY_GATE = 'true'
@@ -384,9 +385,9 @@ print("Semgrep security report processed successfully.")
     }
 }
 
-          // GATE 1: Evaluate SonarQube findings. This current gate reports the Blockers and Critical vulnerabilities; Only issues classified as VULNERABILITY should be considered. We are not evaluating general code quality or maintainability.
+          // GATE 2: Evaluate SonarQube findings. This current gate reports the Blockers and Critical vulnerabilities; Only issues classified as VULNERABILITY should be considered. We are not evaluating general code quality or maintainability.
         
-stage('SonarQube Quality Gate') 
+stage('SonarQube Quality Gate') {
 
     when {
         environment name: 'ENABLE_SONARQUBE_GATE',
@@ -464,7 +465,7 @@ print("SonarQube Quality Gate PASSED.")
 }
 
 
-        // GATE 2: Fail the build if verified secrets are detected.
+        // GATE 3: Fail the build if verified secrets are detected.
 
 stage('TruffleHog Quality Gate') {
     when {
@@ -515,7 +516,7 @@ print("TruffleHog Quality Gate PASSED.")
         }
     }
 }
-        // GATE 3: Fail the build if a dependency vulnerability has CVSS 9.0 or higher.
+        // GATE 4: Fail the build if a dependency vulnerability has CVSS 9.0 or higher.
 
 stage('Dependency-Check Quality Gate') {
     when {
@@ -569,7 +570,7 @@ print("Dependency-Check Quality Gate PASSED.")
     }
 }
 }
-        // GATE 4: Fail the build if Trivy reports any CRITICAL vulnerabilities.
+        // GATE 5: Fail the build if Trivy reports any CRITICAL vulnerabilities.
 
 stage('Trivy Quality Gate') {
     when {
@@ -618,7 +619,7 @@ print("Trivy Quality Gate PASSED.")
     }
 }
 }
-        // GATE 5: Fail the build if ZAP reports any High-risk alerts.
+        // GATE 6: Fail the build if ZAP reports any High-risk alerts.
 
 stage('ZAP Quality Gate') {
     when {
