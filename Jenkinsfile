@@ -63,7 +63,7 @@ stage('Git Secrets (Trufflehog)') {
                         --json \
                         filesystem "/scan${WORKSPACE#/var/jenkins_home}" \
                         --results=verified,unknown \
-                       // --fail \
+                       
                         --fail-on-scan-errors \
                         > trufflehog-report.jsonl
                 '''
@@ -339,7 +339,7 @@ stage('DAST - OWASP ZAP') {
                 """
             }
         }
-    }
+    
         // QUALITY GATES: All scanner stages above finish before these gates are evaluated.
         // Each gate is controlled independently by its own ENABLE_*_GATE setting.
         // An enabled gate can fail the build, but cannot prevent the scans above from running.
