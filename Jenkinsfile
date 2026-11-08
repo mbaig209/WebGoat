@@ -342,25 +342,40 @@ stage('DAST - OWASP ZAP') {
         // Each gate is controlled independently by its own ENABLE_*_GATE setting.
         // An enabled gate can fail the build, but cannot prevent the scans above from running.
         // GATE 1: Evaluate Semgrep findings. This current gate reports the count only; it is non-blocking.
+
 stage('Semgrep Quality Gate') {
     when {
-                environment name: 'ENABLE_SEMGREP_GATE', value: 'true'
-            }
+        environment name: 'ENABLE_SEMGREP_GATE', value: 'true'
+    }
     steps {
-        script {
-            def report = new groovy.json.JsonSlurperClassic().parseText(
-                readFile('semgrep-sast-report.json')
-            )
+        echo 'Evaluating Semgrep security findings...'
 
-            def errorCount = report.results.count {
-                it.extra?.severity == 'ERROR'
-            }
+        sh '''
+            docker run --rm \
+                --user 1000:1000 \
+                -v jenkins_home:/data:ro \
+                -w "/data${WORKSPACE#/var/jenkins_home}" \
+                python:3.12-alpine \
+                python -c '
+import json
 
-            echo "Semgrep ERROR findings: ${errorCount}"
-            echo 'Semgrep baseline collected successfully.'
-        }
+with open("semgrep-sast-report.json") as f:
+    report = json.load(f)
+
+results = report.get("results", [])
+
+error_count = sum(
+    1 for item in results
+    if item.get("extra", {}).get("severity") == "ERROR"
+)
+
+print("Semgrep ERROR findings:", error_count)
+print("Semgrep security report processed successfully.")
+'
+        '''
     }
 }
+
         // GATE 2: Fail the build if verified secrets are detected.
 stage('TruffleHog Quality Gate') {
     when {
