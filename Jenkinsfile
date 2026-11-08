@@ -331,8 +331,8 @@ stage('DAST - OWASP ZAP') {
                         ghcr.io/zaproxy/zaproxy:stable \
                         zap-baseline.py \
                         -t "\$TARGET_URL" \
-                       -r "${WORKSPACE#/var/jenkins_home}/zap_report.html" \
-                        -J "${WORKSPACE#/var/jenkins_home}/zap_report.json" \
+                       -r "\${WORKSPACE#/var/jenkins_home}/zap_report.html" \
+                        -J "\${WORKSPACE#/var/jenkins_home}/zap_report.json" \
                         -I
                 """
             }
