@@ -12,21 +12,26 @@ pipeline {
     }
 
     environment {
-         ENABLE_QUALITY_GATES = 'False'
+        ENABLE_SEMGREP_GATE = 'false'
+        ENABLE_TRUFFLEHOG_GATE = 'false'
+        ENABLE_DEPENDENCY_CHECK_GATE = 'false'
+        ENABLE_TRIVY_GATE = 'false'
+        ENABLE_ZAP_GATE = 'false'
         TOMCAT_CONTAINER = 'webgoat-tomcat'
         TARGET_URL = 'http://webgoat-tomcat:8080/WebGoat'
     }
 
     stages {
 
-        stage('Git Checkout') {
+        // STAGE 1: Clean the workspace and check out the source code.
+stage('Git Checkout') {
             steps {
                 deleteDir()
                 checkout scm
             }
         }
-
-        stage('SAST - Semgrep') {
+        // STAGE 2: Run Semgrep static analysis and save the findings as JSON.
+stage('SAST - Semgrep') {
           
             steps {
                 echo 'Scanning WebGoat source code with Semgrep...'
@@ -46,27 +51,7 @@ pipeline {
                 sh 'ls -lh semgrep-sast-report.json'
             }
         }
-   
-stage('Semgrep Quality Gate') {
-    when {
-        environment name: 'ENABLE_QUALITY_GATES',
-                  value: 'true'
-    }
-    steps {
-        script {
-            def report = new groovy.json.JsonSlurperClassic().parseText(
-                readFile('semgrep-sast-report.json')
-            )
-
-            def errorCount = report.results.count {
-                it.extra?.severity == 'ERROR'
-            }
-
-            echo "Semgrep ERROR findings: ${errorCount}"
-            echo 'Semgrep baseline collected successfully.'
-        }
-    }
-} 
+        // STAGE 3: Scan the source tree for exposed credentials and secrets.
 stage('Git Secrets (Trufflehog)') {
             steps {
                 echo 'Scanning source code for leaked credentials...'
@@ -86,49 +71,8 @@ stage('Git Secrets (Trufflehog)') {
                 sh 'ls -lh trufflehog-report.jsonl'
             }
         }
-
-stage('TruffleHog Quality Gate') {
-    when {
-        environment name: 'ENABLE_QUALITY_GATES',
-                  value: 'true'
-    }
-    steps {
-        script {
-            def verifiedSecrets = 0
-            def reportFile = 'trufflehog-report.jsonl'
-
-            if (!fileExists(reportFile)) {
-                error 'TruffleHog report is missing!'
-            }
-
-            def report = readFile(reportFile)
-
-            if (report.trim()) {
-                report.readLines().each { line ->
-                    if (line.trim()) {
-                        def finding =
-                            new groovy.json.JsonSlurperClassic()
-                                .parseText(line)
-
-                        if (finding.Verified == true) {
-                            verifiedSecrets++
-                        }
-                    }
-                }
-            }
-
-            echo "Verified secrets found: ${verifiedSecrets}"
-
-            if (verifiedSecrets > 0) {
-                error "TruffleHog Quality Gate FAILED: ${verifiedSecrets} verified secrets detected!"
-            }
-
-            echo 'TruffleHog Quality Gate PASSED.'
-        }
-    }
-}
-
-        stage('Build Artifact') {
+        // STAGE 4: Compile and package WebGoat for analysis and deployment.
+stage('Build Artifact') {
             steps {
                 echo 'Building WebGoat using Java 21 settings...'
 
@@ -140,8 +84,7 @@ stage('TruffleHog Quality Gate') {
                 """
             }
         }
-
-        
+        // STAGE 5: Run SonarQube static code analysis on the Maven project.
 stage('SAST - SonarQube') {
     steps {
         echo 'Running SonarQube code analysis...'
@@ -156,8 +99,7 @@ stage('SAST - SonarQube') {
         }
     }
 }
-        
-
+        // STAGE 6: Verify authenticated connectivity to the SonarQube API.
 stage('SonarQube API Connectivity') {
     steps {
         withCredentials([
@@ -181,8 +123,7 @@ stage('SonarQube API Connectivity') {
         }
     }
 }
-
-
+        // STAGE 7: Export SonarQube issues to a JSON report.
 stage('SonarQube - Generate JSON Report') {
     steps {
         withCredentials([
@@ -208,8 +149,7 @@ stage('SonarQube - Generate JSON Report') {
         sh 'ls -lh sonarqube-report.json'
     }
 }
-        
-
+        // STAGE 8: Render the SonarQube JSON export as a readable HTML report.
 stage('SonarQube - Generate HTML Report') {
     steps {
         echo 'Generating SonarQube HTML report...'
@@ -271,9 +211,8 @@ print("HTML report generated:", len(issues), "issues")
         sh 'ls -lh sonarqube-report.html'
     }
 }
-
-
-        stage('Generate CycloneDX SBOM') {
+        // STAGE 9: Generate a CycloneDX Software Bill of Materials for dependency analysis.
+stage('Generate CycloneDX SBOM') {
             steps {
                 echo 'Generating CycloneDX Software Bill of Materials...'
 
@@ -294,6 +233,7 @@ print("HTML report generated:", len(issues), "issues")
                 sh 'ls -lh target/bom.json'
             }
         }
+        // STAGE 10: Scan project dependencies against the NVD vulnerability database.
 stage('SCA - OWASP Dependency-Check') {
     steps {
         echo 'Scanning WebGoat dependencies for known vulnerabilities...'
@@ -317,51 +257,10 @@ stage('SCA - OWASP Dependency-Check') {
             '''
         }
 
-        sh 'ls -lh dependency-check-report.json/'
+        sh 'ls -lh dependency-check-report.json'
     }
 }
-
-stage('Dependency-Check Quality Gate') {
-    stage('Dependency-Check Quality Gate') {
-    when {
-        environment name: 'ENABLE_QUALITY_GATES',
-                  value: 'true'
-    }
-    steps {
-        script {
-            def reportFile = 'dependency-check-report.json'
-
-            if (!fileExists(reportFile)) {
-                error 'Dependency-Check JSON report is missing!'
-            }
-
-            def report = new groovy.json.JsonSlurperClassic()
-                .parseText(readFile(reportFile))
-
-            def criticalCount = 0
-
-            report.dependencies?.each { dependency ->
-                dependency.vulnerabilities?.each { vulnerability ->
-                    def score = vulnerability.cvssv3?.baseScore ?:
-                                vulnerability.cvssv2?.score ?: 0
-
-                    if (score >= 9.0) {
-                        criticalCount++
-                    }
-                }
-            }
-
-            echo "Dependency-Check Critical vulnerabilities: ${criticalCount}"
-
-            if (criticalCount > 0) {
-                error "Dependency-Check Quality Gate FAILED: ${criticalCount} Critical vulnerabilities detected!"
-            }
-
-            echo 'Dependency-Check Quality Gate PASSED.'
-        }
-    }
-}
-
+        // STAGE 11: Scan the CycloneDX SBOM with Trivy.
 stage('SCA - Trivy Dependency Scan') {
             steps {
                 echo 'Scanning CycloneDX SBOM for dependency vulnerabilities...'
@@ -380,46 +279,8 @@ stage('SCA - Trivy Dependency Scan') {
                 sh 'ls -lh trivy-sca-report.json'
             }
         }
-
-    stage('Trivy Quality Gate') {
-        stage('Trivy Quality Gate') {
-            when {
-                environment name: 'ENABLE_QUALITY_GATES',
-                  value: 'true'
-    }
-    steps {
-        script {
-            def reportFile = 'trivy-sca-report.json'
-
-            if (!fileExists(reportFile)) {
-                error 'Trivy JSON report is missing!'
-            }
-
-            def report = new groovy.json.JsonSlurperClassic()
-                .parseText(readFile(reportFile))
-
-            def criticalCount = 0
-
-            report.Results?.each { result ->
-                result.Vulnerabilities?.each { vulnerability ->
-                    if (vulnerability.Severity == 'CRITICAL') {
-                        criticalCount++
-                    }
-                }
-            }
-
-            echo "Trivy Critical vulnerabilities: ${criticalCount}"
-
-            if (criticalCount > 0) {
-                error "Trivy Quality Gate FAILED: ${criticalCount} Critical vulnerabilities detected!"
-            }
-
-            echo 'Trivy Quality Gate PASSED.'
-        }
-    }
-}
-
-        stage('Deploy WebGoat Application') {
+        // STAGE 12: Deploy the built WebGoat JAR in the Docker network for dynamic testing.
+stage('Deploy WebGoat Application') {
             steps {
                 echo 'Starting WebGoat Application...'
 
@@ -459,8 +320,8 @@ stage('SCA - Trivy Dependency Scan') {
                 sh 'sleep 35'
             }
         }
-
-        stage('DAST - OWASP ZAP') {
+        // STAGE 13: Run the OWASP ZAP Baseline DAST scan and save HTML/JSON reports.
+stage('DAST - OWASP ZAP') {
             steps {
                 echo 'Running OWASP ZAP Baseline Scan...'
 
@@ -468,25 +329,160 @@ stage('SCA - Trivy Dependency Scan') {
                     docker run --rm \
                         --user 0:0 \
                         --network devsecops-network \
-                        -v jenkins_home:/zap/wrk:rw
+                        -v jenkins_home:/zap/wrk:rw \
                         ghcr.io/zaproxy/zaproxy:stable \
                         zap-baseline.py \
                         -t "\$TARGET_URL" \
-                        -r "/\${WORKSPACE#/var/jenkins_home/}/zap_report.html"  \
-                        -J "/\${WORKSPACE#/var/jenkins_home}/zap_report.json" \
+                        -r "/zap/wrk\${WORKSPACE#/var/jenkins_home}/zap_report.html" \
+                        -J "/zap/wrk\${WORKSPACE#/var/jenkins_home}/zap_report.json" \
                         -I
                 """
             }
         }
     }
-
-
-stage('ZAP Quality Gate') {
-    stage('ZAP Quality Gate') {
+        // QUALITY GATES: All scanner stages above finish before these gates are evaluated.
+        // Each gate is controlled independently by its own ENABLE_*_GATE setting.
+        // An enabled gate can fail the build, but cannot prevent the scans above from running.
+        // GATE 1: Evaluate Semgrep findings. This current gate reports the count only; it is non-blocking.
+stage('Semgrep Quality Gate') {
     when {
-        environment name: 'ENABLE_QUALITY_GATES',
-                  value: 'true'
+                environment name: 'ENABLE_SEMGREP_GATE', value: 'true'
+            }
+    steps {
+        script {
+            def report = new groovy.json.JsonSlurperClassic().parseText(
+                readFile('semgrep-sast-report.json')
+            )
+
+            def errorCount = report.results.count {
+                it.extra?.severity == 'ERROR'
+            }
+
+            echo "Semgrep ERROR findings: ${errorCount}"
+            echo 'Semgrep baseline collected successfully.'
+        }
     }
+}
+        // GATE 2: Fail the build if verified secrets are detected.
+stage('TruffleHog Quality Gate') {
+    when {
+                environment name: 'ENABLE_TRUFFLEHOG_GATE', value: 'true'
+            }
+    steps {
+        script {
+            def verifiedSecrets = 0
+            def reportFile = 'trufflehog-report.jsonl'
+
+            if (!fileExists(reportFile)) {
+                error 'TruffleHog report is missing!'
+            }
+
+            def report = readFile(reportFile)
+
+            if (report.trim()) {
+                report.readLines().each { line ->
+                    if (line.trim()) {
+                        def finding =
+                            new groovy.json.JsonSlurperClassic()
+                                .parseText(line)
+
+                        if (finding.Verified == true) {
+                            verifiedSecrets++
+                        }
+                    }
+                }
+            }
+
+            echo "Verified secrets found: ${verifiedSecrets}"
+
+            if (verifiedSecrets > 0) {
+                error "TruffleHog Quality Gate FAILED: ${verifiedSecrets} verified secrets detected!"
+            }
+
+            echo 'TruffleHog Quality Gate PASSED.'
+        }
+    }
+}
+        // GATE 3: Fail the build if a dependency vulnerability has CVSS 9.0 or higher.
+stage('Dependency-Check Quality Gate') {
+    when {
+                environment name: 'ENABLE_DEPENDENCY_CHECK_GATE', value: 'true'
+            }
+    steps {
+        script {
+            def reportFile = 'dependency-check-report.json'
+
+            if (!fileExists(reportFile)) {
+                error 'Dependency-Check JSON report is missing!'
+            }
+
+            def report = new groovy.json.JsonSlurperClassic()
+                .parseText(readFile(reportFile))
+
+            def criticalCount = 0
+
+            report.dependencies?.each { dependency ->
+                dependency.vulnerabilities?.each { vulnerability ->
+                    def score = vulnerability.cvssv3?.baseScore ?:
+                                vulnerability.cvssv2?.score ?: 0
+
+                    if (score >= 9.0) {
+                        criticalCount++
+                    }
+                }
+            }
+
+            echo "Dependency-Check Critical vulnerabilities: ${criticalCount}"
+
+            if (criticalCount > 0) {
+                error "Dependency-Check Quality Gate FAILED: ${criticalCount} Critical vulnerabilities detected!"
+            }
+
+            echo 'Dependency-Check Quality Gate PASSED.'
+        }
+    }
+}
+        // GATE 4: Fail the build if Trivy reports any CRITICAL vulnerabilities.
+stage('Trivy Quality Gate') {
+            when {
+                environment name: 'ENABLE_TRIVY_GATE', value: 'true'
+            }
+    steps {
+        script {
+            def reportFile = 'trivy-sca-report.json'
+
+            if (!fileExists(reportFile)) {
+                error 'Trivy JSON report is missing!'
+            }
+
+            def report = new groovy.json.JsonSlurperClassic()
+                .parseText(readFile(reportFile))
+
+            def criticalCount = 0
+
+            report.Results?.each { result ->
+                result.Vulnerabilities?.each { vulnerability ->
+                    if (vulnerability.Severity == 'CRITICAL') {
+                        criticalCount++
+                    }
+                }
+            }
+
+            echo "Trivy Critical vulnerabilities: ${criticalCount}"
+
+            if (criticalCount > 0) {
+                error "Trivy Quality Gate FAILED: ${criticalCount} Critical vulnerabilities detected!"
+            }
+
+            echo 'Trivy Quality Gate PASSED.'
+        }
+    }
+}
+        // GATE 5: Fail the build if ZAP reports any High-risk alerts.
+stage('ZAP Quality Gate') {
+    when {
+                environment name: 'ENABLE_ZAP_GATE', value: 'true'
+            }
     steps {
         script {
             def reportFile = 'zap_report.json'
@@ -518,16 +514,15 @@ stage('ZAP Quality Gate') {
         }
     }
 }
+    }
 
-
-    post {
+post {
     always {
         archiveArtifacts(
-            artifacts: 'dependency-check-report/dependency-check-report.json,semgrep-sast-report.json,sonarqube-report.json,sonarqube-report.html,zap_report.html,zap_report.json,trufflehog-report.jsonl,target/bom.json,trivy-sca-report.json',
+            artifacts: 'dependency-check-report.json,semgrep-sast-report.json,sonarqube-report.json,sonarqube-report.html,zap_report.html,zap_report.json,trufflehog-report.jsonl,target/bom.json,trivy-sca-report.json',
             fingerprint: true,
             allowEmptyArchive: true
         )
     }
-}
 }
 }
