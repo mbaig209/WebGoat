@@ -65,7 +65,7 @@ stage('Git Secrets (Trufflehog)') {
                         --results=verified,unknown \
                        
                         --fail-on-scan-errors \
-                        > trufflehog-report.jsonl
+                        > trufflehog-report.json
                 '''
 
                 sh 'ls -lh trufflehog-report.jsonl'
