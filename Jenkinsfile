@@ -1240,9 +1240,7 @@ lines = [
     "",
     "Scanner findings and quality gates:"
 ]
-
-    data = read_json("semgrep-sast-report.json")
-
+data = read_json("semgrep-sast-report.json")
 if data is None:
     lines.append("Semgrep: report missing")
 else:
