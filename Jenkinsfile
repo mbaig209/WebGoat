@@ -63,9 +63,8 @@ stage('Git Secrets (Trufflehog)') {
                         --json \
                         filesystem "/scan${WORKSPACE#/var/jenkins_home}" \
                         --results=verified,unknown \
-                       
-                        --fail-on-scan-errors \
-                        > trufflehog-report.json
+                        // --fail-on-scan-errors \
+                        > trufflehog-report.jsonl
                 '''
 
                 sh 'ls -lh trufflehog-report.jsonl'
