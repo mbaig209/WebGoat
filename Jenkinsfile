@@ -1071,7 +1071,7 @@ if data:
                 "\\nAlert: " + alert_name +
                 "\\nDescription: " + str(alert.get("desc", "")) +
                 "\\nSolution: " + str(alert.get("solution", "")) +
-                "\\nInstances:\n" + "\n".join(locations),
+                "\\nInstances:\\n" + "\\n".join(locations),
                 site_name + "|" + str(plugin_id) + "|" + alert_name
             )
 
