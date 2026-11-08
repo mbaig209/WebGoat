@@ -331,8 +331,8 @@ stage('DAST - OWASP ZAP') {
                         ghcr.io/zaproxy/zaproxy:stable \
                         zap-baseline.py \
                         -t "\$TARGET_URL" \
-                        -r "/zap/wrk\${WORKSPACE#/var/jenkins_home}/zap_report.html" \
-                        -J "/zap/wrk\${WORKSPACE#/var/jenkins_home}/zap_report.json" \
+                       -r "${WORKSPACE#/var/jenkins_home}/zap_report.html" \
+                        -J "${WORKSPACE#/var/jenkins_home}/zap_report.json" \
                         -I
                 """
             }
@@ -417,116 +417,145 @@ stage('TruffleHog Quality Gate') {
     }
 }
         // GATE 3: Fail the build if a dependency vulnerability has CVSS 9.0 or higher.
+
 stage('Dependency-Check Quality Gate') {
     when {
-                environment name: 'ENABLE_DEPENDENCY_CHECK_GATE', value: 'true'
-            }
+        environment name: 'ENABLE_DEPENDENCY_CHECK_GATE', value: 'true'
+    }
     steps {
-        script {
-            def reportFile = 'dependency-check-report.json'
+        echo 'Evaluating Dependency-Check security findings...'
 
-            if (!fileExists(reportFile)) {
-                error 'Dependency-Check JSON report is missing!'
-            }
+        sh '''
+            docker run --rm \
+                --user 1000:1000 \
+                -v jenkins_home:/data:ro \
+                -w "/data${WORKSPACE#/var/jenkins_home}" \
+                python:3.12-alpine \
+                python -c '
+import json
 
-            def report = new groovy.json.JsonSlurperClassic()
-                .parseText(readFile(reportFile))
+report_file = "dependency-check-report.json"
 
-            def criticalCount = 0
+with open(report_file) as f:
+    report = json.load(f)
 
-            report.dependencies?.each { dependency ->
-                dependency.vulnerabilities?.each { vulnerability ->
-                    def score = vulnerability.cvssv3?.baseScore ?:
-                                vulnerability.cvssv2?.score ?: 0
+critical_count = 0
 
-                    if (score >= 9.0) {
-                        criticalCount++
-                    }
-                }
-            }
+for dependency in report.get("dependencies", []):
+    for vulnerability in dependency.get("vulnerabilities", []):
+        cvssv3 = vulnerability.get("cvssv3") or {}
+        cvssv2 = vulnerability.get("cvssv2") or {}
 
-            echo "Dependency-Check Critical vulnerabilities: ${criticalCount}"
+        score = cvssv3.get("baseScore") or cvssv2.get("score") or 0
 
-            if (criticalCount > 0) {
-                error "Dependency-Check Quality Gate FAILED: ${criticalCount} Critical vulnerabilities detected!"
-            }
+        if float(score) >= 9.0:
+            critical_count += 1
 
-            echo 'Dependency-Check Quality Gate PASSED.'
-        }
+print("Dependency-Check Critical vulnerabilities:", critical_count)
+
+if critical_count > 0:
+    raise SystemExit(
+        "Dependency-Check Quality Gate FAILED: "
+        + str(critical_count)
+        + " Critical vulnerabilities detected!"
+    )
+
+print("Dependency-Check Quality Gate PASSED.")
+'
+        '''
     }
 }
+
         // GATE 4: Fail the build if Trivy reports any CRITICAL vulnerabilities.
+
 stage('Trivy Quality Gate') {
-            when {
-                environment name: 'ENABLE_TRIVY_GATE', value: 'true'
-            }
+    when {
+        environment name: 'ENABLE_TRIVY_GATE', value: 'true'
+    }
     steps {
-        script {
-            def reportFile = 'trivy-sca-report.json'
+        echo 'Evaluating Trivy security findings...'
 
-            if (!fileExists(reportFile)) {
-                error 'Trivy JSON report is missing!'
-            }
+        sh '''
+            docker run --rm \
+                --user 1000:1000 \
+                -v jenkins_home:/data:ro \
+                -w "/data${WORKSPACE#/var/jenkins_home}" \
+                python:3.12-alpine \
+                python -c '
+import json
 
-            def report = new groovy.json.JsonSlurperClassic()
-                .parseText(readFile(reportFile))
+report_file = "trivy-sca-report.json"
 
-            def criticalCount = 0
+with open(report_file) as f:
+    report = json.load(f)
 
-            report.Results?.each { result ->
-                result.Vulnerabilities?.each { vulnerability ->
-                    if (vulnerability.Severity == 'CRITICAL') {
-                        criticalCount++
-                    }
-                }
-            }
+critical_count = 0
 
-            echo "Trivy Critical vulnerabilities: ${criticalCount}"
+for result in report.get("Results", []):
+    for vulnerability in result.get("Vulnerabilities") or []:
+        if vulnerability.get("Severity") == "CRITICAL":
+            critical_count += 1
 
-            if (criticalCount > 0) {
-                error "Trivy Quality Gate FAILED: ${criticalCount} Critical vulnerabilities detected!"
-            }
+print("Trivy Critical vulnerabilities:", critical_count)
 
-            echo 'Trivy Quality Gate PASSED.'
-        }
+if critical_count > 0:
+    raise SystemExit(
+        "Trivy Quality Gate FAILED: "
+        + str(critical_count)
+        + " Critical vulnerabilities detected!"
+    )
+
+print("Trivy Quality Gate PASSED.")
+'
+        '''
     }
 }
+
         // GATE 5: Fail the build if ZAP reports any High-risk alerts.
+
 stage('ZAP Quality Gate') {
     when {
-                environment name: 'ENABLE_ZAP_GATE', value: 'true'
-            }
+        environment name: 'ENABLE_ZAP_GATE', value: 'true'
+    }
     steps {
-        script {
-            def reportFile = 'zap_report.json'
+        echo 'Evaluating OWASP ZAP security findings...'
 
-            if (!fileExists(reportFile)) {
-                error 'ZAP JSON report is missing!'
-            }
+        sh '''
+            docker run --rm \
+                --user 1000:1000 \
+                -v jenkins_home:/data:ro \
+                -w "/data${WORKSPACE#/var/jenkins_home}" \
+                python:3.12-alpine \
+                python -c '
+import json
 
-            def report = new groovy.json.JsonSlurperClassic()
-                .parseText(readFile(reportFile))
+report_file = "zap_report.json"
 
-            def highCount = 0
+with open(report_file) as f:
+    report = json.load(f)
 
-            report.site?.each { site ->
-                site.alerts?.each { alert ->
-                    if (alert.riskcode?.toString() == '3') {
-                        highCount++
-                    }
-                }
-            }
+high_count = 0
 
-            echo "ZAP High-risk alerts: ${highCount}"
+for site in report.get("site", []):
+    for alert in site.get("alerts", []):
+        if str(alert.get("riskcode", "")) == "3":
+            high_count += 1
 
-            if (highCount > 0) {
-                error "ZAP Quality Gate FAILED: ${highCount} High-risk alerts detected!"
-            }
+print("ZAP High-risk alerts:", high_count)
 
-            echo 'ZAP Quality Gate PASSED.'
-        }
+if high_count > 0:
+    raise SystemExit(
+        "ZAP Quality Gate FAILED: "
+        + str(high_count)
+        + " High-risk alerts detected!"
+    )
+
+print("ZAP Quality Gate PASSED.")
+'
+        '''
     }
 }
+
     }
 
 post {
