@@ -673,6 +673,482 @@ print("ZAP Quality Gate PASSED.")
 
     }
         // STAGE 14: Publish scan findings and report links to the Jira tracking issue.
+        
+        // STAGE 14: Create individual Jira defects for Blocker, Critical and High findings.
+        stage('Jira Defect Creation') {
+            when {
+                environment name: 'ENABLE_JIRA_REPORTING', value: 'true'
+            }
+            steps {
+                catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: 'jira-webgoat-credentials',
+                            usernameVariable: 'JIRA_EMAIL',
+                            passwordVariable: 'JIRA_API_TOKEN'
+                        )
+                    ]) {
+                        sh '''
+                            docker run --rm -i \
+                                --network devsecops-network \
+                                -v jenkins_home:/data:ro \
+                                -w "/data${WORKSPACE#/var/jenkins_home}" \
+                                -e JIRA_EMAIL="$JIRA_EMAIL" \
+                                -e JIRA_API_TOKEN="$JIRA_API_TOKEN" \
+                                -e JIRA_BASE_URL="$JIRA_BASE_URL" \
+                                -e BUILD_NUMBER="$BUILD_NUMBER" \
+                                -e BUILD_URL="$BUILD_URL" \
+                                -e JOB_NAME="$JOB_NAME" \
+                                python:3.12-alpine \
+                                python - <<'PY'
+import os
+import json
+import base64
+import hashlib
+import urllib.request
+import urllib.error
+import urllib.parse
+from pathlib import Path
+
+BASE = os.environ["JIRA_BASE_URL"].rstrip("/")
+PROJECT = "SCRUM"
+ISSUE_TYPE = "Bug"
+
+EMAIL = os.environ["JIRA_EMAIL"]
+TOKEN = os.environ["JIRA_API_TOKEN"]
+
+BUILD = os.getenv("BUILD_NUMBER", "unknown")
+BUILD_URL = os.getenv("BUILD_URL", "")
+JOB = os.getenv("JOB_NAME", "unknown")
+
+AUTH = base64.b64encode(
+    (EMAIL + ":" + TOKEN).encode()
+).decode()
+
+HEADERS = {
+    "Authorization": "Basic " + AUTH,
+    "Accept": "application/json",
+    "Content-Type": "application/json"
+}
+
+findings = {}
+
+
+def read_json(filename):
+    path = Path(filename)
+    if not path.exists():
+        print("Report unavailable:", filename)
+        return None
+
+    with path.open(encoding="utf-8") as f:
+        return json.load(f)
+
+
+def add_finding(scanner, severity, title, details, stable_key):
+    if severity not in ("BLOCKER", "CRITICAL", "HIGH"):
+        return
+
+    fingerprint = hashlib.sha256(
+        (scanner + "|" + stable_key).encode()
+    ).hexdigest()[:20]
+
+    findings[fingerprint] = {
+        "scanner": scanner,
+        "severity": severity,
+        "title": str(title)[:180],
+        "details": str(details)[:12000],
+        "fingerprint": fingerprint
+    }
+
+
+def jira_request(method, endpoint, payload=None):
+    url = BASE + endpoint
+    data = None
+
+    if payload is not None:
+        data = json.dumps(payload).encode()
+
+    request = urllib.request.Request(
+        url,
+        data=data,
+        headers=HEADERS,
+        method=method
+    )
+
+    with urllib.request.urlopen(request, timeout=45) as response:
+        raw = response.read().decode()
+        return json.loads(raw) if raw else {}
+
+
+def existing_issue(fingerprint):
+    label = "sec-fp-" + fingerprint
+
+    jql = (
+        'project = "' + PROJECT + '" AND labels = "' +
+        label + '"'
+    )
+
+    result = jira_request(
+        "POST",
+        "/rest/api/3/search/jql",
+        {
+            "jql": jql,
+            "maxResults": 1,
+            "fields": ["key"]
+        }
+    )
+
+    issues = result.get("issues", [])
+    return issues[0]["key"] if issues else None
+
+
+def create_issue(item):
+    label = "sec-fp-" + item["fingerprint"]
+
+    summary = (
+        "[" + item["severity"] + "] [" +
+        item["scanner"] + "] " + item["title"]
+    )[:250]
+
+    description_text = (
+        "Automated security finding detected by Jenkins.\n\n"
+        "Scanner: " + item["scanner"] + "\n"
+        "Severity: " + item["severity"] + "\n"
+        "Build: #" + BUILD + "\n"
+        "Job: " + JOB + "\n"
+        "Build URL: " + BUILD_URL + "\n"
+        "Fingerprint: " + item["fingerprint"] + "\n\n"
+        "Finding details:\n" + item["details"]
+    )
+
+    payload = {
+        "fields": {
+            "project": {"key": PROJECT},
+            "issuetype": {"name": ISSUE_TYPE},
+            "summary": summary,
+            "description": {
+                "type": "doc",
+                "version": 1,
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": description_text
+                            }
+                        ]
+                    }
+                ]
+            },
+            "labels": [
+                "security",
+                "automated",
+                "webgoat",
+                label
+            ]
+        }
+    }
+
+    result = jira_request(
+        "POST",
+        "/rest/api/3/issue",
+        payload
+    )
+
+    return result.get("key", "created-without-key")
+
+
+# --------------------------------------------------
+# 1. SEMGREP
+# --------------------------------------------------
+
+data = read_json("semgrep-sast-report.json")
+
+if data:
+    for item in data.get("results", []):
+        extra = item.get("extra", {})
+        metadata = extra.get("metadata", {})
+
+        impact = str(metadata.get("impact", "")).upper()
+
+        if impact != "HIGH":
+            continue
+
+        path = item.get("path", "Unknown file")
+        line = item.get("start", {}).get("line", "N/A")
+        rule = item.get("check_id", "Unknown rule")
+        message = extra.get("message", "")
+
+        add_finding(
+            "Semgrep",
+            "HIGH",
+            rule,
+            "File: " + path +
+            "\nLine: " + str(line) +
+            "\nRule: " + rule +
+            "\nFinding: " + str(message),
+            rule + "|" + path + "|" + str(line)
+        )
+
+
+# --------------------------------------------------
+# 2. SONARQUBE
+# --------------------------------------------------
+
+data = read_json("sonarqube-report.json")
+
+if data:
+    for item in data.get("issues", []):
+        if item.get("type") != "VULNERABILITY":
+            continue
+
+        severity_map = {
+            "BLOCKER": "BLOCKER",
+            "CRITICAL": "CRITICAL"
+        }
+
+        severity = severity_map.get(item.get("severity"))
+
+        if not severity:
+            continue
+
+        rule = item.get("rule", "Unknown rule")
+        component = item.get("component", "Unknown component")
+        line = item.get("line", "N/A")
+        message = item.get("message", "")
+
+        add_finding(
+            "SonarQube",
+            severity,
+            rule,
+            "Rule: " + rule +
+            "\nComponent: " + component +
+            "\nLine: " + str(line) +
+            "\nFinding: " + str(message),
+            item.get("key", rule + "|" + component + "|" + str(line))
+        )
+
+
+# --------------------------------------------------
+# 3. TRIVY
+# --------------------------------------------------
+
+data = read_json("trivy-sca-report.json")
+
+if data:
+    for result in data.get("Results", []):
+        target = result.get("Target", "Unknown target")
+
+        for vuln in result.get("Vulnerabilities") or []:
+            severity = str(vuln.get("Severity", "")).upper()
+
+            if severity not in ("CRITICAL", "HIGH"):
+                continue
+
+            vuln_id = vuln.get("VulnerabilityID", "Unknown ID")
+            package = vuln.get("PkgName", "Unknown package")
+            version = vuln.get("InstalledVersion", "Unknown")
+            fixed = vuln.get("FixedVersion", "Not specified")
+
+            add_finding(
+                "Trivy",
+                severity,
+                vuln_id + " - " + package,
+                "Target: " + target +
+                "\nPackage: " + package +
+                "\nInstalled version: " + str(version) +
+                "\nFixed version: " + str(fixed) +
+                "\nVulnerability ID: " + vuln_id,
+                target + "|" + vuln_id + "|" + package + "|" + str(version)
+            )
+
+
+# --------------------------------------------------
+# 4. DEPENDENCY-CHECK
+# --------------------------------------------------
+
+data = read_json("dependency-check-report.json")
+
+if data:
+    for dependency in data.get("dependencies", []):
+        package = dependency.get("fileName", "Unknown dependency")
+
+        for vuln in dependency.get("vulnerabilities", []):
+            cvssv3 = vuln.get("cvssv3") or {}
+            cvssv2 = vuln.get("cvssv2") or {}
+
+            score = float(
+                cvssv3.get("baseScore") or
+                cvssv2.get("score") or 0
+            )
+
+            if score >= 9.0:
+                severity = "CRITICAL"
+            elif score >= 7.0:
+                severity = "HIGH"
+            else:
+                continue
+
+            vuln_id = vuln.get("name", "Unknown CVE")
+            description = vuln.get("description", "")
+
+            add_finding(
+                "Dependency-Check",
+                severity,
+                vuln_id + " - " + package,
+                "Dependency: " + package +
+                "\nVulnerability: " + vuln_id +
+                "\nCVSS score: " + str(score) +
+                "\nDescription: " + str(description),
+                package + "|" + vuln_id
+            )
+
+
+# --------------------------------------------------
+# 5. OWASP ZAP
+# --------------------------------------------------
+
+data = read_json("zap_report.json")
+
+if data:
+    for site in data.get("site", []):
+        site_name = site.get("name", "Unknown site")
+
+        for alert in site.get("alerts", []):
+            if str(alert.get("riskcode", "")) != "3":
+                continue
+
+            alert_name = alert.get("alert", "Unknown alert")
+            plugin_id = alert.get("pluginid", "")
+            instances = alert.get("instances", [])
+
+            locations = []
+
+            for instance in instances[:10]:
+                locations.append(
+                    str(instance.get("uri", "")) +
+                    " | Method: " + str(instance.get("method", ""))
+                )
+
+            add_finding(
+                "OWASP ZAP",
+                "HIGH",
+                alert_name,
+                "Site: " + site_name +
+                "\nAlert: " + alert_name +
+                "\nDescription: " + str(alert.get("desc", "")) +
+                "\nSolution: " + str(alert.get("solution", "")) +
+                "\nInstances:\n" + "\n".join(locations),
+                site_name + "|" + str(plugin_id) + "|" + alert_name
+            )
+
+
+# --------------------------------------------------
+# 6. TRUFFLEHOG
+# --------------------------------------------------
+
+secret_path = Path("trufflehog-report.jsonl")
+
+if secret_path.exists():
+    with secret_path.open(encoding="utf-8") as f:
+        for raw in f:
+            if not raw.strip():
+                continue
+
+            item = json.loads(raw)
+
+            if item.get("Verified") is not True:
+                continue
+
+            detector = item.get("DetectorName", "Unknown detector")
+            metadata = item.get("SourceMetadata", {})
+            filesystem = metadata.get("Data", {}).get("Filesystem", {})
+
+            source_file = filesystem.get("file", "Unknown file")
+            line = filesystem.get("line", "N/A")
+            commit = item.get("SourceID", "Unknown source")
+
+            # Never include Raw, RawV2 or secret values in Jira.
+            add_finding(
+                "TruffleHog",
+                "HIGH",
+                "Verified secret detected - " + detector,
+                "Detector: " + detector +
+                "\nFile: " + str(source_file) +
+                "\nLine: " + str(line) +
+                "\nSource reference: " + str(commit) +
+                "\nA verified secret was detected. Secret value intentionally excluded.",
+                detector + "|" + str(source_file) + "|" + str(line) + "|" + str(commit)
+            )
+
+
+# --------------------------------------------------
+# 7. CREATE JIRA ISSUES WITHOUT DUPLICATES
+# --------------------------------------------------
+
+print("")
+print("======================================")
+print("JIRA SECURITY DEFECT SYNCHRONIZATION")
+print("======================================")
+print("Eligible findings:", len(findings))
+
+created = 0
+duplicates = 0
+
+for fingerprint, item in findings.items():
+    try:
+        old_issue = existing_issue(fingerprint)
+
+        if old_issue:
+            print(
+                "Existing Jira defect:",
+                old_issue,
+                "|",
+                item["scanner"],
+                "|",
+                item["severity"]
+            )
+            duplicates += 1
+            continue
+
+        issue_key = create_issue(item)
+
+        print(
+            "Created Jira defect:",
+            issue_key,
+            "|",
+            item["scanner"],
+            "|",
+            item["severity"]
+        )
+
+        created += 1
+
+    except urllib.error.HTTPError as exc:
+        print(
+            "Jira API error for",
+            item["scanner"],
+            item["fingerprint"],
+            "HTTP",
+            exc.code
+        )
+        print(exc.read().decode(errors="replace"))
+        raise
+
+print("")
+print("======================================")
+print("JIRA DEFECT SYNCHRONIZATION COMPLETED")
+print("New defects created:", created)
+print("Existing defects skipped:", duplicates)
+print("======================================")
+PY
+                        '''
+                    }
+                }
+            }
+        }
+
         stage('Jira Reporting') {
             when {
                 environment name: 'ENABLE_JIRA_REPORTING', value: 'true'
