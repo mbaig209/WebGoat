@@ -139,7 +139,7 @@ stage('SonarQube - Generate JSON Report') {
                     curlimages/curl:latest \
                     -fsS \
                     -u "$SONAR_TOKEN:" \
-                    "http://sonarqube:9000/api/issues/search?componentKeys=WebGoat&ps=500" \
+                    "http://sonarqube:9000/api/issues/search?componentKeys=WebGoat&types=VULNERABILITY&ps=500" \
                     -o "/data${WORKSPACE#/var/jenkins_home}/sonarqube-report.json"
             '''
         }
@@ -193,8 +193,8 @@ th{background:#263b59;color:white}
 tr:nth-child(even){background:#f2f2f2}
 </style></head><body>
 <h1>WebGoat - SonarQube Analysis Report</h1>
-<h2>Issue Summary</h2><ul>""" + summary + """</ul>
-<h2>Issue Details</h2>
+<h2>Security Vulnerability Summary</h2><ul>""" + summary + """</ul>
+<h2>Security Vulnerability Details</h2>
 <table><tr><th>Severity</th><th>Type</th><th>File</th>
 <th>Line</th><th>Message</th></tr>""" + rows + """</table>
 </body></html>"""
