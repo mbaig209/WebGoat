@@ -343,20 +343,27 @@ stage('DAST - OWASP ZAP') {
         // An enabled gate can fail the build, but cannot prevent the scans above from running.
         // GATE 1: Evaluate Semgrep findings. This current gate reports the count only; it is non-blocking.
 
+
 stage('Semgrep Quality Gate') {
     when {
-        environment name: 'ENABLE_SEMGREP_GATE', value: 'true'
+        environment name: 'ENABLE_SEMGREP_GATE',
+                  value: 'true'
     }
-    steps {
-        echo 'Evaluating Semgrep security findings...'
 
-        sh '''
-            docker run --rm \
-                --user 1000:1000 \
-                -v jenkins_home:/data:ro \
-                -w "/data${WORKSPACE#/var/jenkins_home}" \
-                python:3.12-alpine \
-                python -c '
+    steps {
+        catchError(
+            buildResult: 'FAILURE',
+            stageResult: 'FAILURE'
+        ) {
+            echo 'Evaluating Semgrep security findings...'
+
+            sh '''
+                docker run --rm \
+                    --user 1000:1000 \
+                    -v jenkins_home:/data:ro \
+                    -w "/data${WORKSPACE#/var/jenkins_home}" \
+                    python:3.12-alpine \
+                    python -c '
 import json
 
 with open("semgrep-sast-report.json") as f:
@@ -372,9 +379,90 @@ error_count = sum(
 print("Semgrep ERROR findings:", error_count)
 print("Semgrep security report processed successfully.")
 '
-        '''
+            '''
+        }
     }
 }
+
+          // GATE 1: Evaluate SonarQube findings. This current gate reports the Blockers and Critical vulnerabilities; Only issues classified as VULNERABILITY should be considered. We are not evaluating general code quality or maintainability.
+        
+stage('SonarQube Quality Gate') 
+
+    when {
+        environment name: 'ENABLE_SONARQUBE_GATE',
+                  value: 'true'
+    }
+
+    steps {
+        catchError(
+            buildResult: 'FAILURE',
+            stageResult: 'FAILURE'
+        ) {
+
+            echo 'Evaluating SonarQube security vulnerabilities...'
+
+            sh '''
+                docker run --rm \
+                    --user 1000:1000 \
+                    -v jenkins_home:/data:ro \
+                    -w "/data${WORKSPACE#/var/jenkins_home}" \
+                    python:3.12-alpine \
+                    python -c '
+import json
+
+report_file = "sonarqube-report.json"
+
+with open(report_file) as f:
+    report = json.load(f)
+
+issues = report.get("issues", [])
+
+# Consider only security vulnerabilities
+vulnerabilities = [
+    issue for issue in issues
+    if issue.get("type") == "VULNERABILITY"
+]
+
+blocker_count = sum(
+    1 for issue in vulnerabilities
+    if issue.get("severity") == "BLOCKER"
+)
+
+critical_count = sum(
+    1 for issue in vulnerabilities
+    if issue.get("severity") == "CRITICAL"
+)
+
+major_count = sum(
+    1 for issue in vulnerabilities
+    if issue.get("severity") == "MAJOR"
+)
+
+minor_count = sum(
+    1 for issue in vulnerabilities
+    if issue.get("severity") == "MINOR"
+)
+
+print("SonarQube Vulnerability Summary")
+print("--------------------------------")
+print("BLOCKER vulnerabilities:", blocker_count)
+print("CRITICAL vulnerabilities:", critical_count)
+print("MAJOR vulnerabilities:", major_count)
+print("MINOR vulnerabilities:", minor_count)
+
+if blocker_count > 0 or critical_count > 0:
+    raise SystemExit(
+        "SonarQube Quality Gate FAILED: "
+        "Blocker or Critical vulnerabilities detected."
+    )
+
+print("SonarQube Quality Gate PASSED.")
+'
+            '''
+        }
+    }
+}
+
 
         // GATE 2: Fail the build if verified secrets are detected.
 
