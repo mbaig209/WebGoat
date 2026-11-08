@@ -345,8 +345,11 @@ stage('DAST - OWASP ZAP') {
         // QUALITY GATES: All scanner stages above finish before these gates are evaluated.
         // Each gate is controlled independently by its own ENABLE_*_GATE setting.
         // An enabled gate can fail the build, but cannot prevent the scans above from running.
-        // GATE 1: Evaluate Semgrep findings. This current gate reports the count only; it is non-blocking.
+        
 
+
+// GATE 1: Evaluate Semgrep findings.
+// Fail the gate when High-impact vulnerabilities are detected.
 
 stage('Semgrep Quality Gate') {
     when {
@@ -380,13 +383,42 @@ error_count = sum(
     if item.get("extra", {}).get("severity") == "ERROR"
 )
 
+high_count = sum(
+    1 for item in results
+    if str(
+        item.get("extra", {})
+            .get("metadata", {})
+            .get("impact", "")
+    ).upper() == "HIGH"
+)
+
+medium_count = sum(
+    1 for item in results
+    if str(
+        item.get("extra", {})
+            .get("metadata", {})
+            .get("impact", "")
+    ).upper() == "MEDIUM"
+)
+
 print("Semgrep ERROR findings:", error_count)
-print("Semgrep security report processed successfully.")
+print("Semgrep HIGH-impact findings:", high_count)
+print("Semgrep MEDIUM-impact findings:", medium_count)
+
+if high_count > 0:
+    raise SystemExit(
+        "Semgrep Quality Gate FAILED: "
+        + str(high_count)
+        + " High-impact findings detected!"
+    )
+
+print("Semgrep Quality Gate PASSED.")
 '
             '''
         }
     }
 }
+
 
           // GATE 2: Evaluate SonarQube findings. This current gate reports the Blockers and Critical vulnerabilities; Only issues classified as VULNERABILITY should be considered. We are not evaluating general code quality or maintainability.
         
