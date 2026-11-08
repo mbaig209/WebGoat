@@ -18,6 +18,9 @@ pipeline {
         ENABLE_DEPENDENCY_CHECK_GATE = 'true'
         ENABLE_TRIVY_GATE = 'true'
         ENABLE_ZAP_GATE = 'true'
+        ENABLE_JIRA_REPORTING = 'true'
+        JIRA_BASE_URL = 'https://codefortix.atlassian.net'
+        JIRA_ISSUE_KEY = 'SCRUM-5'
         TOMCAT_CONTAINER = 'webgoat-tomcat'
         TARGET_URL = 'http://webgoat-tomcat:8080/WebGoat'
     }
@@ -669,6 +672,190 @@ print("ZAP Quality Gate PASSED.")
 }
 
     }
+        // STAGE 14: Publish scan findings and report links to the Jira tracking issue.
+        stage('Jira Reporting') {
+            when {
+                environment name: 'ENABLE_JIRA_REPORTING', value: 'true'
+            }
+            steps {
+                // A Jira outage must not change the security scan build result.
+                catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                    script {
+                        env.JIRA_BUILD_RESULT = currentBuild.currentResult ?: 'UNKNOWN'
+                    }
+
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: 'jira-webgoat-credentials',
+                            usernameVariable: 'JIRA_EMAIL',
+                            passwordVariable: 'JIRA_API_TOKEN'
+                        )
+                    ]) {
+                        sh '''
+                            docker run --rm -i \
+                                --network devsecops-network \
+                                -v jenkins_home:/data:ro \
+                                -w "/data${WORKSPACE#/var/jenkins_home}" \
+                                -e JIRA_EMAIL="$JIRA_EMAIL" \
+                                -e JIRA_API_TOKEN="$JIRA_API_TOKEN" \
+                                -e JIRA_BASE_URL="$JIRA_BASE_URL" \
+                                -e JIRA_ISSUE_KEY="$JIRA_ISSUE_KEY" \
+                                -e JIRA_BUILD_RESULT="$JIRA_BUILD_RESULT" \
+                                -e BUILD_NUMBER="$BUILD_NUMBER" \
+                                -e BUILD_URL="$BUILD_URL" \
+                                -e JOB_NAME="$JOB_NAME" \
+                                python:3.12-alpine \
+                                python - <<'PY'
+import base64
+import json
+import os
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+def read_json(name):
+    path = Path(name)
+    if not path.exists():
+        return None
+    with path.open(encoding="utf-8") as f:
+        return json.load(f)
+
+def status(failed):
+    return "FAILED" if failed else "PASSED"
+
+lines = [
+    "WebGoat DevSecOps Security Scan Report",
+    "Job: " + os.getenv("JOB_NAME", "unknown"),
+    "Build: #" + os.getenv("BUILD_NUMBER", "unknown"),
+    "Build result: " + os.getenv("JIRA_BUILD_RESULT", "UNKNOWN"),
+    "Build URL: " + os.getenv("BUILD_URL", "unavailable"),
+    "",
+    "Scanner findings and quality gates:"
+]
+
+data = read_json("semgrep-sast-report.json")
+if data is None:
+    lines.append("Semgrep: report missing")
+else:
+    count = sum(1 for x in data.get("results", [])
+                if x.get("extra", {}).get("severity") == "ERROR")
+    lines.append("Semgrep: " + str(count) + " ERROR findings (informational)")
+
+data = read_json("sonarqube-report.json")
+if data is None:
+    lines.append("SonarQube: report missing")
+else:
+    vulns = [x for x in data.get("issues", [])
+             if x.get("type") == "VULNERABILITY"]
+    counts = {s: sum(1 for x in vulns if x.get("severity") == s)
+              for s in ("BLOCKER", "CRITICAL", "MAJOR", "MINOR")}
+    lines.append(
+        "SonarQube vulnerabilities: BLOCKER={BLOCKER}, CRITICAL={CRITICAL}, "
+        "MAJOR={MAJOR}, MINOR={MINOR}; gate={gate}".format(
+            **counts, gate=status(counts["BLOCKER"] > 0 or counts["CRITICAL"] > 0))
+    )
+
+secret_path = Path("trufflehog-report.jsonl")
+if not secret_path.exists():
+    lines.append("TruffleHog: report missing")
+else:
+    verified = 0
+    with secret_path.open(encoding="utf-8") as f:
+        for raw in f:
+            if raw.strip() and json.loads(raw).get("Verified") is True:
+                verified += 1
+    lines.append("TruffleHog: " + str(verified) +
+                 " verified secrets; gate=" + status(verified > 0))
+
+data = read_json("dependency-check-report.json")
+if data is None:
+    lines.append("Dependency-Check: report missing")
+else:
+    count = 0
+    for dep in data.get("dependencies", []):
+        for vuln in dep.get("vulnerabilities", []):
+            v3, v2 = vuln.get("cvssv3") or {}, vuln.get("cvssv2") or {}
+            if float(v3.get("baseScore") or v2.get("score") or 0) >= 9.0:
+                count += 1
+    lines.append("Dependency-Check: " + str(count) +
+                 " findings with CVSS >= 9.0; gate=" + status(count > 0))
+
+data = read_json("trivy-sca-report.json")
+if data is None:
+    lines.append("Trivy: report missing")
+else:
+    count = sum(1 for r in data.get("Results", [])
+                for v in (r.get("Vulnerabilities") or [])
+                if v.get("Severity") == "CRITICAL")
+    lines.append("Trivy: " + str(count) +
+                 " CRITICAL vulnerabilities; gate=" + status(count > 0))
+
+data = read_json("zap_report.json")
+if data is None:
+    lines.append("OWASP ZAP: report missing")
+else:
+    count = sum(1 for site in data.get("site", [])
+                for alert in site.get("alerts", [])
+                if str(alert.get("riskcode", "")) == "3")
+    lines.append("OWASP ZAP: " + str(count) +
+                 " High-risk alerts; gate=" + status(count > 0))
+
+build_url = os.getenv("BUILD_URL", "")
+lines += [
+    "",
+    "Archived reports (available after build completion):",
+    build_url + "artifact/semgrep-sast-report.json",
+    build_url + "artifact/sonarqube-report.html",
+    build_url + "artifact/trufflehog-report.jsonl",
+    build_url + "artifact/dependency-check-report.json",
+    build_url + "artifact/trivy-sca-report.json",
+    build_url + "artifact/zap_report.html"
+]
+
+# Jira Cloud REST API v3 comment bodies use Atlassian Document Format (ADF).
+content = []
+for line in lines:
+    content.append({
+        "type": "paragraph",
+        "content": ([{"type": "text", "text": line}] if line else [])
+    })
+payload = {"body": {"type": "doc", "version": 1, "content": content}}
+
+email = os.environ["JIRA_EMAIL"]
+token = os.environ["JIRA_API_TOKEN"]
+base = os.environ["JIRA_BASE_URL"].rstrip("/")
+issue = os.environ["JIRA_ISSUE_KEY"]
+url = base + "/rest/api/3/issue/" + issue + "/comment"
+auth = base64.b64encode((email + ":" + token).encode()).decode()
+request = urllib.request.Request(
+    url,
+    data=json.dumps(payload).encode(),
+    headers={
+        "Authorization": "Basic " + auth,
+        "Accept": "application/json",
+        "Content-Type": "application/json"
+    },
+    method="POST"
+)
+
+try:
+    with urllib.request.urlopen(request, timeout=30) as response:
+        result = json.loads(response.read().decode())
+        print("Jira comment created successfully for", issue)
+        print("Jira comment ID:", result.get("id", "not returned"))
+except urllib.error.HTTPError as exc:
+    print("Jira API returned HTTP", exc.code)
+    print(exc.read().decode(errors="replace"))
+    raise SystemExit(1)
+except Exception as exc:
+    print("Jira reporting failed:", str(exc))
+    raise SystemExit(1)
+PY
+                        '''
+                    }
+                }
+            }
+        }
     }
 post {
     always {
@@ -680,4 +867,3 @@ post {
     }
 }
 }
-
