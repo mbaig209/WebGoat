@@ -843,14 +843,14 @@ def create_issue(item):
     )[:250]
 
     description_text = (
-        "Automated security finding detected by Jenkins.\n\n"
-        "Scanner: " + item["scanner"] + "\n"
-        "Severity: " + item["severity"] + "\n"
-        "Build: #" + BUILD + "\n"
-        "Job: " + JOB + "\n"
-        "Build URL: " + BUILD_URL + "\n"
-        "Fingerprint: " + item["fingerprint"] + "\n\n"
-        "Finding details:\n" + item["details"]
+        "Automated security finding detected by Jenkins.\\n\\n"
+        "Scanner: " + item["scanner"] + "\\n"
+        "Severity: " + item["severity"] + "\\n"
+        "Build: #" + BUILD + "\\n"
+        "Job: " + JOB + "\\n"
+        "Build URL: " + BUILD_URL + "\\n"
+        "Fingerprint: " + item["fingerprint"] + "\\n\\n"
+        "Finding details:\\n" + item["details"]
     )
 
     payload = {
@@ -917,9 +917,9 @@ if data:
             "HIGH",
             rule,
             "File: " + path +
-            "\nLine: " + str(line) +
-            "\nRule: " + rule +
-            "\nFinding: " + str(message),
+            "\\nLine: " + str(line) +
+            "\\nRule: " + rule +
+            "\\nFinding: " + str(message),
             rule + "|" + path + "|" + str(line)
         )
 
@@ -955,9 +955,9 @@ if data:
             severity,
             rule,
             "Rule: " + rule +
-            "\nComponent: " + component +
-            "\nLine: " + str(line) +
-            "\nFinding: " + str(message),
+            "\\nComponent: " + component +
+            "\\nLine: " + str(line) +
+            "\\nFinding: " + str(message),
             item.get("key", rule + "|" + component + "|" + str(line))
         )
 
@@ -988,10 +988,10 @@ if data:
                 severity,
                 vuln_id + " - " + package,
                 "Target: " + target +
-                "\nPackage: " + package +
-                "\nInstalled version: " + str(version) +
-                "\nFixed version: " + str(fixed) +
-                "\nVulnerability ID: " + vuln_id,
+                "\\nPackage: " + package +
+                "\\nInstalled version: " + str(version) +
+                "\\nFixed version: " + str(fixed) +
+                "\\nVulnerability ID: " + vuln_id,
                 target + "|" + vuln_id + "|" + package + "|" + str(version)
             )
 
@@ -1030,9 +1030,9 @@ if data:
                 severity,
                 vuln_id + " - " + package,
                 "Dependency: " + package +
-                "\nVulnerability: " + vuln_id +
-                "\nCVSS score: " + str(score) +
-                "\nDescription: " + str(description),
+                "\\nVulnerability: " + vuln_id +
+                "\\nCVSS score: " + str(score) +
+                "\\nDescription: " + str(description),
                 package + "|" + vuln_id
             )
 
@@ -1068,10 +1068,10 @@ if data:
                 "HIGH",
                 alert_name,
                 "Site: " + site_name +
-                "\nAlert: " + alert_name +
-                "\nDescription: " + str(alert.get("desc", "")) +
-                "\nSolution: " + str(alert.get("solution", "")) +
-                "\nInstances:\n" + "\n".join(locations),
+                "\\nAlert: " + alert_name +
+                "\\nDescription: " + str(alert.get("desc", "")) +
+                "\\nSolution: " + str(alert.get("solution", "")) +
+                "\\nInstances:\n" + "\n".join(locations),
                 site_name + "|" + str(plugin_id) + "|" + alert_name
             )
 
@@ -1107,10 +1107,10 @@ if secret_path.exists():
                 "HIGH",
                 "Verified secret detected - " + detector,
                 "Detector: " + detector +
-                "\nFile: " + str(source_file) +
-                "\nLine: " + str(line) +
-                "\nSource reference: " + str(commit) +
-                "\nA verified secret was detected. Secret value intentionally excluded.",
+                "\\nFile: " + str(source_file) +
+                "\\nLine: " + str(line) +
+                "\\nSource reference: " + str(commit) +
+                "\\nA verified secret was detected. Secret value intentionally excluded.",
                 detector + "|" + str(source_file) + "|" + str(line) + "|" + str(commit)
             )
 
