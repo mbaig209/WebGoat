@@ -192,7 +192,7 @@ th,td{border:1px solid #ddd;padding:9px;text-align:left}
 th{background:#263b59;color:white}
 tr:nth-child(even){background:#f2f2f2}
 </style></head><body>
-<h1>WebGoat - SonarQube Analysis Report</h1>
+<h1>WebGoat -SonarQube Security Vulnerability Report</h1>
 <h2>Security Vulnerability Summary</h2><ul>""" + summary + """</ul>
 <h2>Security Vulnerability Details</h2>
 <table><tr><th>Severity</th><th>Type</th><th>File</th>
