@@ -1241,13 +1241,38 @@ lines = [
     "Scanner findings and quality gates:"
 ]
 
-data = read_json("semgrep-sast-report.json")
+    data = read_json("semgrep-sast-report.json")
+
 if data is None:
     lines.append("Semgrep: report missing")
 else:
-    count = sum(1 for x in data.get("results", [])
-                if x.get("extra", {}).get("severity") == "ERROR")
-    lines.append("Semgrep: " + str(count) + " ERROR findings (informational)")
+    results = data.get("results", [])
+
+    error_count = sum(
+        1 for x in results
+        if x.get("extra", {}).get("severity") == "ERROR"
+    )
+
+    high_count = sum(
+        1 for x in results
+        if str(
+            x.get("extra", {}).get("metadata", {}).get("impact", "")
+        ).upper() == "HIGH"
+    )
+
+    medium_count = sum(
+        1 for x in results
+        if str(
+            x.get("extra", {}).get("metadata", {}).get("impact", "")
+        ).upper() == "MEDIUM"
+    )
+
+    lines.append(
+        "Semgrep: ERROR=" + str(error_count) +
+        ", HIGH impact=" + str(high_count) +
+        ", MEDIUM impact=" + str(medium_count) +
+        "; gate=" + status(high_count > 0)
+    )
 
 data = read_json("sonarqube-report.json")
 if data is None:
