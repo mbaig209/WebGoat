@@ -12,11 +12,11 @@ pipeline {
     }
 
     environment {
-        ENABLE_SEMGREP_GATE = 'false'
-        ENABLE_TRUFFLEHOG_GATE = 'false'
-        ENABLE_DEPENDENCY_CHECK_GATE = 'false'
-        ENABLE_TRIVY_GATE = 'false'
-        ENABLE_ZAP_GATE = 'false'
+        ENABLE_SEMGREP_GATE = 'true'
+        ENABLE_TRUFFLEHOG_GATE = 'true'
+        ENABLE_DEPENDENCY_CHECK_GATE = 'true'
+        ENABLE_TRIVY_GATE = 'true'
+        ENABLE_ZAP_GATE = 'true'
         TOMCAT_CONTAINER = 'webgoat-tomcat'
         TARGET_URL = 'http://webgoat-tomcat:8080/WebGoat'
     }
