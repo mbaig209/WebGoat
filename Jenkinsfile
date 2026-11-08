@@ -377,42 +377,53 @@ print("Semgrep security report processed successfully.")
 }
 
         // GATE 2: Fail the build if verified secrets are detected.
+
 stage('TruffleHog Quality Gate') {
     when {
-                environment name: 'ENABLE_TRUFFLEHOG_GATE', value: 'true'
-            }
+        environment name: 'ENABLE_TRUFFLEHOG_GATE', value: 'true'
+    }
     steps {
-        script {
-            def verifiedSecrets = 0
-            def reportFile = 'trufflehog-report.jsonl'
+        catchError(
+            buildResult: 'FAILURE',
+            stageResult: 'FAILURE'
+        ) {
+            echo 'Evaluating TruffleHog security findings...'
 
-            if (!fileExists(reportFile)) {
-                error 'TruffleHog report is missing!'
-            }
+            sh '''
+                docker run --rm \
+                    --user 1000:1000 \
+                    -v jenkins_home:/data:ro \
+                    -w "/data${WORKSPACE#/var/jenkins_home}" \
+                    python:3.12-alpine \
+                    python -c '
+import json
 
-            def report = readFile(reportFile)
+report_file = "trufflehog-report.jsonl"
 
-            if (report.trim()) {
-                report.readLines().each { line ->
-                    if (line.trim()) {
-                        def finding =
-                            new groovy.json.JsonSlurperClassic()
-                                .parseText(line)
+verified_count = 0
 
-                        if (finding.Verified == true) {
-                            verifiedSecrets++
-                        }
-                    }
-                }
-            }
+with open(report_file) as f:
+    for line in f:
+        if not line.strip():
+            continue
 
-            echo "Verified secrets found: ${verifiedSecrets}"
+        finding = json.loads(line)
 
-            if (verifiedSecrets > 0) {
-                error "TruffleHog Quality Gate FAILED: ${verifiedSecrets} verified secrets detected!"
-            }
+        if finding.get("Verified") is True:
+            verified_count += 1
 
-            echo 'TruffleHog Quality Gate PASSED.'
+print("TruffleHog Verified secrets:", verified_count)
+
+if verified_count > 0:
+    raise SystemExit(
+        "TruffleHog Quality Gate FAILED: "
+        + str(verified_count)
+        + " verified secrets detected!"
+    )
+
+print("TruffleHog Quality Gate PASSED.")
+'
+            '''
         }
     }
 }
@@ -569,7 +580,7 @@ print("ZAP Quality Gate PASSED.")
 }
 
     }
-
+    }
 post {
     always {
         archiveArtifacts(
